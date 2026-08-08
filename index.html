@@ -1,0 +1,3394 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+    
+<script>
+    // VERSAO 05/Abr/2026 - Agora usando o CTRL+ e CTRL- para redimensinar a mesa!
+    // VERSAO 30/Mar/2026 - Correção dos botoes UNDO e REDO na barra superior
+    </script>
+
+<script>
+// ==========================================
+// ARRASTE HORIZONTAL (APENAS PARA MOUSE NO PC)
+// O celular usará o scroll nativo perfeito via CSS
+// ==========================================
+(function() {
+    let isDown = false;
+    let startX;
+    let scrollLeft;
+    let activeBar = null;
+    let hasDragged = false;
+
+    // 1. Quando clica
+    document.addEventListener('pointerdown', (e) => {
+        // SE NÃO FOR MOUSE (ou seja, for touch no celular), ABORTA O SCRIPT!
+        if (e.pointerType !== 'mouse' || e.button !== 0) return;
+
+        const bar = e.target.closest('#top-menu-bar, .card-options, #card-options2');
+        if (!bar) return;
+
+        isDown = true;
+        hasDragged = false;
+        activeBar = bar;
+        activeBar.style.cursor = 'grabbing';
+        
+        startX = e.pageX - activeBar.offsetLeft;
+        scrollLeft = activeBar.scrollLeft;
+    });
+
+    // 2. Quando move o mouse
+    document.addEventListener('pointermove', (e) => {
+        if (!isDown || !activeBar || e.pointerType !== 'mouse') return;
+
+        const x = e.pageX - activeBar.offsetLeft;
+        const walk = (x - startX) * 1.5; // Velocidade do deslize
+        
+        // Se moveu mais de 5 pixels, considera um arraste
+        if (Math.abs(walk) > 5) {
+            hasDragged = true;
+            e.preventDefault(); // Impede de selecionar texto sem querer
+            activeBar.scrollLeft = scrollLeft - walk;
+        }
+    });
+
+    // 3. Quando solta o botão do mouse
+    document.addEventListener('pointerup', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        
+        isDown = false;
+        if (activeBar) {
+            activeBar.style.cursor = 'grab';
+            activeBar = null;
+        }
+    });
+
+    // 4. Bloqueia o clique no botão SE acabou de arrastar com o mouse
+    document.addEventListener('click', (e) => {
+        if (hasDragged) {
+            const bar = e.target.closest('#top-menu-bar, .card-options, #card-options2');
+            if (bar) {
+                e.preventDefault();
+                e.stopPropagation();
+                hasDragged = false; // Reseta para o próximo clique funcionar
+            }
+        }
+    }, true);
+
+    // 5. Impede o "Drag Fantasma" de imagens no PC
+    document.addEventListener('dragstart', (e) => {
+        if (e.target.closest('#top-menu-bar, .card-options, #card-options2')) {
+            e.preventDefault();
+        }
+    });
+})();
+</script>
+
+
+
+<head>
+    
+
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <meta name="game-id" content="pencils_and_powers_v1"> <!-- Identificador único da página -->
+
+    <title>Pencils & Powers - O Cavaleiro Terrível</title>
+    <link rel="stylesheet" href="styles.css">
+
+<style>
+    /* Garante que os botões não encolham e permitam o arraste horizontal */
+#top-menu-bar button, 
+#undo-button, 
+#redo-button {
+    flex-shrink: 0;      /* Impede o botão de diminuir */
+    touch-action: pan-x; /* Permite que o arrasto horizontal passe pelo botão sem clicar */
+    user-select: none;   /* Evita seleção de texto indesejada */
+    white-space: nowrap;
+}
+
+
+/* Efeito de desfoque para popups em carregamento */
+.popup-loading {
+    filter: blur(10px);
+    pointer-events: none; /* Impede cliques e arrastes enquanto desfocado */
+    transition: filter 0.5s ease; /* Transição suave quando o blur sair */
+}
+
+
+
+    /* Estilo da janela flutuante */
+        #janelaFlutuante {
+            width: 100%;
+            max-height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+    background-color: rgba(255, 255, 255, 0.9); /* Branco com 90% de opacidade */
+            border: 1px solid #ccc;
+            box-shadow: 0px 0px 10px rgba(0,0,0,0.5);
+            z-index:999999999999999999999999999999999999999999999999898987999999;
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+            overflow: hidden;
+        }
+
+
+
+
+#resizeHandle {
+    width: 10px; /* Largura da área de redimensionamento */
+    height: 100%; /* Altura total da janela */
+    background: #ccc; /* Cor da área de redimensionamento */
+    position: absolute;
+    right: 0; /* Posiciona à direita */
+    top: 0; /* Inicia no topo */
+    cursor: ew-resize; /* Cursor de redimensionamento horizontal */
+}
+
+
+
+
+
+
+
+
+
+
+        #janelaFlutuante.minimizado {
+            height: 40px; /* Altura para o modo minimizado */
+            overflow: hidden;
+        }
+
+        #janelaFlutuante.aberto {
+            transform: translateY(0); /* Exibe a janela deslizando para baixo */
+      }
+
+        #barraTitulo {
+            padding: 5px;
+            background-color: #333;
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            user-select: none;
+            cursor: grab;
+        }
+
+        .botao {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.2em;
+            cursor: pointer;
+        }
+
+        /* Estilo do conteúdo da página */
+        .content {
+            padding: 20px;
+        }
+
+
+
+
+
+
+
+
+
+/* ==========================================
+   ESTILIZAÇÃO DA COLUNA RETRÁTIL E MESA
+   ========================================== */
+
+/* Contêiner principal com Flexbox para "empurrar" naturalmente */
+.layout-container {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Coluna da esquerda (aba retrátil) */
+.left-column {
+    width: 250px;
+    min-width: 250px; /* Impede a aba de ser esmagada */
+    height: 88vh;
+    background-color: black; /* Cor sólida IDÊNTICA ao carregamento inicial, sem transparência! */
+    padding: 10px;
+    z-index: 1000;
+    transition: margin-left 0.3s ease-in-out;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+/* Mesa virtual (coluna direita) */
+.right-column {
+    flex-grow: 1; /* Faz a mesa ocupar o espaço restante automaticamente */
+    height: 100vh;
+    position: relative;
+    transition: width 0.3s ease-in-out;
+    overflow: hidden;
+}
+
+/* Quando a aba é recolhida, aplicamos margem negativa para escondê-la */
+body.sidebar-hidden .left-column {
+    margin-left: -250px;
+}
+
+/* Botão retrátil como aba lateral */
+.toggle-sidebar {
+    position: fixed;
+    left: 0; /* Fica sempre fixo na borda esquerda */
+    top: 50%;
+    transform: translateY(-50%);
+    background: #333; /* Volta para o cinza original */
+    color: white;
+    border: none;
+    padding: 12px 8px;
+    cursor: pointer;
+    font-size: 16px;
+    border-radius: 0 10px 10px 0;
+    z-index: 1100;
+    writing-mode: vertical-rl;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent; /* Evita piscar no telemóvel */
+}
+
+/* Efeito ao passar o mouse ou tocar */
+.toggle-sidebar:hover, 
+.toggle-sidebar:active {
+    background: #555; /* Cinza mais claro */
+}
+
+/* 📱 Ajustes para telas menores (celular) */
+@media (max-width: 768px) {
+    .left-column {
+        width: 150px;
+        min-width: 150px;
+        padding: 5px;
+    }
+
+    /* Margem de recolhimento adaptada ao tamanho do celular */
+    body.sidebar-hidden .left-column {
+        margin-left: -150px;
+    }
+
+    .toggle-sidebar {
+        /* Aumenta o botão no telemóvel para facilitar o toque, mas mantém fixo à esquerda */
+        padding: 20px 14px;
+        font-size: 20px;
+    }
+
+    .deck img {
+        width: 70%;
+    }
+
+    .deck {
+        width: 100%;
+        display: block;
+        text-align: center;
+        margin-bottom: 5px;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+  /*FAz os decks dinamicos sumirem já que não estou conseguindo que funcionem direito*/
+ #decks_dinamicos {
+      display: none;
+    } 
+/*FAz o botão ficar invisivel do SETUP EMBARALHAR*/
+ #shuffle-button{
+      display: none;
+    } 
+
+
+/*IMPORTANTE: USAR SOMENTE SE NÂO HOUVER 2° SETUP!FAz o botão ficar invisivel do setup2-btn*/ 
+#setup2-btn{
+      display: none;
+    } 
+
+
+
+
+
+
+
+
+
+
+
+
+ /* Estilo do botão principal */
+.main-button {
+    padding: 5px 7px;
+    font-size: 14px;
+    cursor: pointer;
+    background-color: grey;
+    color: white;
+    border: 2px solid white;
+    border-radius: 5px;
+    display: inline-block;
+    margin: 0;
+    text-align: center;
+}
+
+/* Estilo do menu dropdown */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+/* Estilo da lista oculta */
+.dropdown-content {
+    display: none;
+    background-color: white;
+    width: auto;
+    max-width: 90%;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+    padding: 10px;
+    z-index: 1000;
+}
+
+/* Estilo dos itens da lista */
+.audio-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+    font-size: 14px;
+    transition: background-color 0.3s ease;
+}
+
+/* Cores personalizáveis dos itens */
+.white-bg {
+    background-color: white;
+}
+
+.light-gray-bg {
+    background-color: #f0f0f0;
+}
+
+.dark-gray-bg {
+    background-color: #d3d3d3;
+}
+
+/* Estilo do nome do áudio */
+.audio-item span {
+    color: black;
+    font-size: 16px;
+    margin-top: 5px;
+    flex: 1;
+    text-align: center;
+}
+
+/* Estilo do botão Play/Pause */
+.play-button {
+    background-color: #28a745;
+    color: white;
+    padding: 5px 8px;adicionarssssssss
+    border: none;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    height: auto;
+    margin-bottom: 10px;
+}
+
+/* Hover no botão Play/Pause */
+.play-button:hover {
+    background-color: #218838;
+}
+
+/* Estilos de visibilidade do menu */
+.dropdown-content.show {
+    display: block;
+}
+
+
+
+
+
+
+
+
+    </style>
+</head>
+<body>
+    
+
+<div id="top-menu-bar" class="integrated-menu">
+    
+<!-- MOEDA ESTILIZADA -->
+
+<button id="moedas" style="
+    width: 38px; /* Largura fixa para manter o formato circular */
+    height: 38px; /* Altura fixa para manter o formato circular */
+    background-color: #FFD700; /* Cor dourada */
+    background-image: linear-gradient(45deg, #FFD700, #FFC107, #FFB300);
+    color: black;
+    border: 2px solid black; /* Borda interna preta */
+    border-radius: 50%; /* Torna o botão circular */
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+    display: inline-flex; /* Permite que fique ao lado de outros elementos */
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    vertical-align: middle; /* Alinhamento vertical */
+    margin: 5px; /* Espaço ao redor do botão */
+    /* Bordas simuladas com sombra para criar camadas */
+    box-shadow: 
+        0px 0px 0px 2px #FFD700,   /* Borda dourada externa */
+        0px 0px 0px 4px black;      /* Borda preta externa */
+">
+    0 $
+</button>
+    <button onclick="adjustZoom('increase')">🔍 Zoom +</button>
+    <button onclick="adjustZoom('decrease')">🔍 Zoom -</button>
+    
+    <button onclick="toggleJanela()">📜 Regras/Documentos</button>
+    <button id="create-note-btn"  style="border: 2px solid white; background-color: darkred; ">Criar Notas</button>
+ 
+<button onclick="triggerNotePopup(event)"  style="border: 2px solid yellow; background-color: darkorange; ">Adicionar POST-IT</button>
+
+
+  <!--  <button onclick="openPopupNote()">📝 Notas</button> -->
+    
+    <button onclick="limparTodosOsRastreios()">🧹 Limpar Rastros</button>
+    
+     <button id="undo-button"><< UNDO</button>
+     
+    <button id="redo-button">REDO >></button>
+    
+    <button id="salvar1111" onclick="saveFullPage(); salvarTexto();" 
+        style="border: 2px solid red; padding: 5px 10px; background-color: transparent; color: white;">
+    Salvar Jogo
+</button>
+    
+    <button id="btn-toggle-lousa" onclick="alternarLousaGlobal()">✏️ Lousa: OFF</button>
+</div>
+
+
+
+<!-- Adiciona o botão de ocultação da coluna a esquerda -->
+<button class="toggle-sidebar" id="toggleSidebar">☰</button> 
+
+
+
+<div id="janelaFlutuante">
+    <div id="barraTitulo">
+        <span>Regras, Anotações e Vídeos!</span>
+        <button class="botao" id="botaoMinimizar">−</button>
+    </div>
+    <iframe src="dados.html" title="Janela Conteúdo" style="width: 100%; height: calc(100vh - 40px); border: none;"></iframe>
+    <div id="resizeHandle"></div> <!-- Adiciona um elemento para redimensionamento -->
+
+</div>
+
+
+
+<script>
+// Função para alternar a visibilidade da janela
+function toggleJanela() {
+    const janelaFlutuante = document.getElementById("janelaFlutuante");
+    
+    if (janelaFlutuante.style.display === 'none' || janelaFlutuante.style.display === '') {
+        janelaFlutuante.style.display = 'block'; // Mostra a janela
+        janelaFlutuante.classList.add("aberto"); // Adiciona a classe para a animação
+    } else {
+        janelaFlutuante.style.display = 'none'; // Oculta a janela
+        janelaFlutuante.classList.remove("aberto"); // Remove a classe da animação
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    const janelaFlutuante = document.getElementById("janelaFlutuante");
+    const botaoMinimizar = document.getElementById("botaoMinimizar");
+    const resizeHandle = document.getElementById("resizeHandle");
+
+    let isResizing = false;
+
+    // Alternar minimizar/restaurar
+    botaoMinimizar.addEventListener("click", () => {
+        if (janelaFlutuante.classList.contains("aberto")) {
+            janelaFlutuante.classList.remove("aberto");
+        } else {
+            janelaFlutuante.classList.add("aberto");
+        }
+    });
+
+    // Redimensionamento da janela
+    resizeHandle.addEventListener("mousedown", (e) => {
+        isResizing = true;
+        e.preventDefault(); // Evita a seleção de texto
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (isResizing) {
+            const newWidth = e.clientX - janelaFlutuante.getBoundingClientRect().left; // Nova largura
+            const newHeight = e.clientY - janelaFlutuante.getBoundingClientRect().top; // Nova altura
+            if (newWidth > 100) { // Largura mínima
+                janelaFlutuante.style.width = `${newWidth}px`;
+            }
+            if (newHeight > 100) { // Altura mínima
+                janelaFlutuante.style.height = `${newHeight}px`;
+            }
+        }
+    });
+
+    document.addEventListener("mouseup", () => {
+        isResizing = false;
+    });
+});
+</script>
+
+
+
+
+    <script>
+        // Função para exibir a confirmação de saída da página
+        window.onbeforeunload = function() {
+            return "Tem certeza que deseja sair ou recarregar a página? Alterações podem ser perdidas.";
+        };
+
+        // Desativar arrastar imagens no documento
+        document.addEventListener('dragstart', function(e) {
+            if (e.target.tagName === 'IMG') {
+                e.preventDefault();
+            }
+        });
+      </script>
+
+
+
+
+<script>
+//bloquei o uso do botão direito do mouse dentro da area da mesa virtual!
+    // Espera a página carregar completamente
+    document.addEventListener('DOMContentLoaded', function() {
+        // Seleciona a área específica onde o botão direito será desabilitado
+        var tableArea = document.getElementById('table-area');
+        
+        // Adiciona o evento 'contextmenu' para bloquear o clique direito
+        tableArea.addEventListener('contextmenu', function(event) {
+            event.preventDefault();  // Impede o menu de contexto de abrir
+           // alert("O botão direito está desabilitado nesta área.");
+        });
+    });
+</script>
+
+
+
+
+
+</head>
+
+   
+
+
+
+
+
+
+
+
+<div class="fixed-buttons">
+ <b>Pencils & Powers - O Cavaleiro Terrível</b>
+    <br><br><br><br>
+     </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <!-- Contêiner para as colunas (decks à esquerda, mesa à direita) -->
+    <div class="layout-container">
+        <!-- Coluna da esquerda (decks) -->
+        <div class="left-column">
+            <div class="decks-container">
+                <!-- Decks na coluna esquerda -->
+
+
+
+
+
+
+   
+
+                
+               
+                    
+               
+ 
+
+<div id="decks_dinamicos" style="">  </div>
+
+
+
+ <!-- Botão principal para abrir a cascata
+<div class="dropdown">
+    <button class="main-button" onclick="toggleDropdown()">👉 Clique aqui [Áudios]</button>
+    <div class="dropdown-content" id="audioDropdown"></div>
+</div> -->
+
+<script>
+    // Lista de áudios com caminho correto
+    var audios = [
+        { nome: "<b>FILHOS DE TIFÃO</b> <br><br>Detalhes da Operação", arquivo: "Filhos de Tifão - Detalhes da Operação.mp3", corFundo: "white-bg" },
+        { nome: "Filhos de Tifão - Ato 1 - Travessia do Rio - Registro de Abe", arquivo: "Filhos de Tifão - Ato 1 - Travessia do Rio - Registro de Abe.mp3", corFundo: "white-bg" },
+        { nome: "Filhos de Tifão - Ato 1 - Travessia do Rio - Relatório pós ação", arquivo: "Filhos de Tifão - Ato 1 - Travessia do Rio - Relatório pos ação.mp3", corFundo: "white-bg" },
+        { nome: "Filhos de Tifão - Ato 2 - Reconhecimento da Aldeia - Registro de Abe", arquivo: "Filhos de Tifão - Ato 2 - Reconhecimento da Aldeia - Registro de Abe.mp3", corFundo: "white-bg" },
+        { nome: "Filhos de Tifão - Ato 2 - Reconhecimento da Aldeia - Relatório pós Ação", arquivo: "Filhos de Tifão - Ato 2 - Reconhecimento da Aldeia - Relatório pós Ação.mp3", corFundo: "white-bg" },
+        { nome: "Filhos de Tifão - Ato 3 - Incursão à Mina - Registro de Abe", arquivo: "Filhos de Tifão - Ato 3 - Incursão à Mina - Registro de Abe.mp3", corFundo: "white-bg" },
+        { nome: "Filhos de Tifão - Ato 3 - Incursão à Mina - Relatório pós Missão", arquivo: "Filhos de Tifão - Ato 3 - Incursão à Mina - Relatório pós Missão.mp3", corFundo: "white-bg" },
+        { nome: "<b>AMOR DE MÃE</b> <br><br>Detalhes da Operação", arquivo: "Amor de MÆe - Detalhes da OperaÆo.mp3", corFundo: "light-gray-bg" },
+        { nome: "Amor de Mãe - Ato 1 - Traição - Registro de Abe", arquivo: "Amor de MÆe - Ato 1 - TraiÆo - Registro de Abe.mp3", corFundo: "light-gray-bg" },
+        { nome: "Amor de Mãe - Ato 1 - Traição - Relatório pós Ação", arquivo: "Amor de MÆe - Ato 1 - TraiÆo - Relat¢rio p¢s AÆo.mp3", corFundo: "light-gray-bg" },
+        { nome: "Amor de Mãe - Ato 2 - Biotério - Registro de Abe", arquivo: "Amor de MÆe - Ato 2 - Biotrio - Registro de Abe.mp3", corFundo: "light-gray-bg" },
+        { nome: "Amor de Mãe - Ato 2 - Biotério - Relatório pós Ação", arquivo: "Amor de MÆe - Ato 2 - Biotrio - Relat¢rio p¢s AÆo.mp3", corFundo: "light-gray-bg" },
+        { nome: "Amor de Mãe - Ato 3 - Projenitora do Infinito - Registro de Abe", arquivo: "Amor de MÆe - Ato 3 - Projenitora do Infinito - Registro de Abe.mp3", corFundo: "light-gray-bg" },
+        { nome: "Amor de Mãe - Ato 3 - Projenitora do Infinito - Relatório pós Ação", arquivo: "Amor de MÆe - Ato 3 - Projenitora do Infinito - Relat¢rio p¢s AÆo.mp3", corFundo: "light-gray-bg" },
+        { nome: "<b>TURNO DA NOITE</b> <br><br>Detalhes da Operação", arquivo: "Turno da Noite - Detalhes da OperaÆo .mp3", corFundo: "white-bg" },
+        { nome: "Turno da Noite - Ato 1 - A Revelação", arquivo: "Turno da Noite - Ato 1 - A RevelaÆo.mp3", corFundo: "white-bg" },
+        { nome: "Turno da Noite - Ato 1 - A Revelaçãoo - Relatório pós Ação", arquivo: "Turno da Noite - Ato 1 - A RevelaÆo - Relat¢rio p¢s AÆo.mp3", corFundo: "white-bg" },
+        { nome: "Turno da Noite - Ato 2 - Porta de Entrada - Registro Abe", arquivo: "Turno da Noite - Ato 2 - Porta de Entrada - Registro Abe.mp3", corFundo: "white-bg" },
+        { nome: "Turno da Noite - Ato 2 - Porta de Entrada - Relatório pós Ação", arquivo: "Turno da Noite - Ato 2 - Porta de Entrada - Relat¢rio p¢s AÆo.mp3", corFundo: "white-bg" },
+        { nome: "Turno da Noite - Ato 3 - Lua Azul - Registro Abe", arquivo: "Turno da Noite - Ato 3 - Lua Azul - Registro Abe.mp3", corFundo: "white-bg" },
+        { nome: "Turno da Noite - Ato 3 - Lua Azul - Relatório pós Ação", arquivo: "Turno da Noite - Ato 3 - Lua Azul - Relat¢rio p¢s aÆo.mp3", corFundo: "white-bg" }
+    ];
+
+    var dropdown = document.getElementById("audioDropdown");
+    var audioElements = {}; // Armazena os players para controle
+
+    // Criar botões para cada áudio dinamicamente
+    audios.forEach((audio, index) => {
+        var audioItem = document.createElement("div");
+        audioItem.classList.add("audio-item");
+
+        // Adicionando a classe para mudar a cor de fundo
+        audioItem.classList.add(audio.corFundo); // Aqui usamos a cor definida na lista de áudios
+
+        // Criando o botão de play/pause
+        var playButton = document.createElement("button");
+        playButton.innerText = "▶️";
+        playButton.classList.add("play-button");
+        playButton.setAttribute("data-id", index);
+
+        // Criando o nome do áudio
+        var audioName = document.createElement("span");
+       // audioName.innerText = audio.nome;
+       audioName.innerHTML = audio.nome;
+
+        // Criando o elemento de áudio
+        var audioElement = document.createElement("audio");
+        audioElement.src = audio.arquivo;
+        audioElement.id = "audio" + index;
+
+        // Armazena o elemento de áudio
+        audioElements[index] = audioElement;
+
+        // Evento de clique para tocar ou pausar o áudio
+        playButton.onclick = function () {
+            togglePlayPause(index, playButton);
+        };
+
+        // Adicionando elementos na lista
+        audioItem.appendChild(playButton);
+        audioItem.appendChild(audioName);
+        dropdown.appendChild(audioItem);
+        dropdown.appendChild(audioElement);
+    });
+
+    // Alternar visibilidade do menu
+    function toggleDropdown() {
+        dropdown.style.display = (dropdown.style.display === "block") ? "none" : "block";
+    }
+
+    // Esconder menu ao clicar fora
+    document.addEventListener("click", function (event) {
+        var isClickInside = document.querySelector(".dropdown").contains(event.target);
+        if (!isClickInside) {
+            dropdown.style.display = "none";
+        }
+    });
+
+    // Função para tocar ou pausar áudio
+    function togglePlayPause(index, button) {
+        var audio = audioElements[index];
+
+        if (audio.paused) {
+            // Parar todos os outros áudios antes de tocar um novo
+            Object.values(audioElements).forEach(a => {
+                a.pause();
+                a.currentTime = 0;
+            });
+
+            audio.play();
+            button.innerText = "⏸️"; // Muda para ícone de pausa
+        } else {
+            audio.pause();
+            button.innerText = "▶️"; // Muda para ícone de play
+        }
+
+        // Quando o áudio terminar, volta o botão para "Play"
+        audio.onended = function () {
+            button.innerText = "▶️";
+        };
+    }
+</script>
+
+
+
+
+
+
+
+<div><b>DECKS GERAIS:</b></div>
+ <br>
+   
+
+ <div class="deck">
+                    <img src="deck1/deck-back.jpeg" alt="Deck 1" class="deck-back" onclick="drawCard(1)" onerror="reloadDeckImage(this, 'deck1/deck-back.jpeg')">
+<center><p>CARTA</p></center>
+
+                    <button onclick="reshuffleDeck(1)">Recolher</button>
+                    <button onclick="openCardSelector(1)">Selecionar Carta</button>
+                </div>
+
+
+<!--
+<div class="deck">
+                    <img src="deck2/deck-back.jpeg" alt="Deck 2" class="deck-back" onclick="drawCard(2)" onerror="reloadDeckImage(this, 'deck2/deck-back.jpeg')">
+<center><p>EQUIPAMENTOS <br> INICIAIS</p></center>
+
+                    <button onclick="reshuffleDeck(2)">Recolher</button>
+                    <button onclick="openCardSelector(2)">Selecionar Carta</button>
+                </div>
+
+
+
+<div class="deck">
+                    <img src="deck3/deck-back.jpeg" alt="Deck 3" class="deck-back" onclick="drawCard(3)" onerror="reloadDeckImage(this, 'deck3/deck-back.jpeg')">
+    <p>RELÍQUIAS</p>
+                    <button onclick="reshuffleDeck(3)">Recolher</button>
+                    <button onclick="openCardSelector(3)">Selecionar Carta</button>
+                </div>
+
+
+
+
+
+ <div class="deck">
+                    <img src="deck4/deck-back.jpeg" alt="Deck 4" class="deck-back" onclick="drawCard(4)" onerror="reloadDeckImage(this, 'deck4/deck-back.jpeg')">
+<center><p>TESOUROS</p></center>
+
+                    <button onclick="reshuffleDeck(4)">Recolher</button>
+                    <button onclick="openCardSelector(4)">Selecionar Carta</button>
+                </div>
+
+
+
+
+ <div class="deck">
+                    <img src="deck5/deck-back.jpeg" alt="Deck 5" class="deck-back" onclick="drawCard(5)" onerror="reloadDeckImage(this, 'deck5/deck-back.jpeg')">
+<center><p>LENDÁRIAS</p></center>
+
+                    <button onclick="reshuffleDeck(5)">Recolher</button>
+                    <button onclick="openCardSelector(5)">Selecionar Carta</button>
+                </div>
+                
+                
+                
+   <div class="deck">
+                    <img src="deck6/deck-back.jpeg" alt="Deck 6" class="deck-back" onclick="drawCard(6)" onerror="reloadDeckImage(this, 'deck6/deck-back.jpeg')">
+<center><p>EVENTOS</p></center>
+
+                    <button onclick="reshuffleDeck(6)">Recolher</button>
+                    <button onclick="openCardSelector(6)">Selecionar Carta</button>
+                </div>             
+                
+
+
+
+
+
+<br><br><br>
+<b>__________________________</b>
+    
+<div><b>MINIATURAS:&nbsp;&nbsp;&nbsp;&nbsp;</b></div>
+ <br>
+
+          
+
+<div class="deck">
+                    <img src="deck49/deck-back.jpeg" alt="Deck 49" class="deck-back" onclick="drawCard(49)" onerror="reloadDeckImage(this, 'deck49/deck-back.jpeg')">
+<center><p>MINIATURAS <br> PERSONAGENS</p></center>
+
+                    <button onclick="reshuffleDeck(49)">Recolher</button>
+                    <button onclick="openCardSelector(49)">Selecionar Carta</button>
+                </div>
+
+
+
+<div class="deck">
+                    <img src="deck50/deck-back.jpeg" alt="Deck 50" class="deck-back" onclick="drawCard(50)" onerror="reloadDeckImage(this, 'deck50/deck-back.jpeg')">
+<center><p>MINIATURAS <br> MONSTROS</p></center>
+
+                    <button onclick="reshuffleDeck(50)">Recolher</button>
+                    <button onclick="openCardSelector(50)">Selecionar Carta</button>
+                </div>
+
+
+
+
+<br><br><br>
+<b>__________________________</b>
+    
+<div><b>FICHAS:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b></div>
+ <br>
+
+          
+
+<div class="deck">
+                    <img src="deck51/deck-back.jpeg" alt="Deck 51" class="deck-back" onclick="drawCard(51)" onerror="reloadDeckImage(this, 'deck51/deck-back.jpeg')">
+<center><p>FICHAS <br> PERSONAGENS</p></center>
+
+                    <button onclick="reshuffleDeck(51)">Recolher</button>
+                    <button onclick="openCardSelector(51)">Selecionar Carta</button>
+                </div>
+
+
+
+<div class="deck">
+                    <img src="deck52/deck-back.jpeg" alt="Deck 52" class="deck-back" onclick="drawCard(52)" onerror="reloadDeckImage(this, 'deck52/deck-back.jpeg')">
+<center><p>FICHAS <br> CHEFES e SUB-CHEFES</p></center>
+
+                    <button onclick="reshuffleDeck(52)">Recolher</button>
+                    <button onclick="openCardSelector(52)">Selecionar Carta</button>
+                </div>
+
+
+
+
+
+
+
+
+
+
+
+ <div class="deck">
+                    <img src="deck60/deck-back.jpeg" alt="Deck 60" class="deck-back" onclick="drawCard(60)" onerror="reloadDeckImage(this, 'deck60/deck-back.jpeg')">
+<center><p>CARTAS <br> FRANCO-ATIRADOR</p></center>
+
+                    <button onclick="reshuffleDeck(60)">Recolher</button>
+                    <button onclick="openCardSelector(60)">Selecionar Carta</button>
+                </div>
+
+
+
+
+                         
+
+
+
+<br><br><br>
+<b>__________________________</b>
+    
+ <br>
+
+
+
+
+
+
+
+ <div class="deck">
+                    <img src="deck59/deck-back.jpeg" alt="Deck 59" class="deck-back" onclick="drawCard(59)" onerror="reloadDeckImage(this, 'deck59/deck-back.jpeg')">
+<center><p>CARTAS <br> FOCUS LIDER</p></center>
+
+                    <button onclick="reshuffleDeck(59)">Recolher</button>
+                    <button onclick="openCardSelector(59)">Selecionar Carta</button>
+                </div>
+
+
+<div class="deck">
+                    <img src="deck52/deck-back.jpeg" alt="Deck 52" class="deck-back" onclick="drawCard(52)" onerror="reloadDeckImage(this, 'deck52/deck-back.jpeg')">
+<center><p>CARTAS <br> FOCUS COMBATE CORPORAL</p></center>
+
+                    <button onclick="reshuffleDeck(52)">Recolher</button>
+                    <button onclick="openCardSelector(52)">Selecionar Carta</button>
+                </div>
+
+
+
+
+
+ <div class="deck">
+                    <img src="deck50/deck-back.jpeg" alt="Deck 50" class="deck-back" onclick="drawCard(50)" onerror="reloadDeckImage(this, 'deck50/deck-back.jpeg')">
+    <p>CARTAS <br> FOCUS DEMOLIÇÃO</p>
+                    <button onclick="reshuffleDeck(50)">Recolher</button>
+                    <button onclick="openCardSelector(50)">Selecionar Carta</button>
+                </div>
+    
+                
+           
+                <div class="deck">
+                    <img src="deck51/deck-back.jpeg" alt="Deck 51" class="deck-back" onclick="drawCard(51)" onerror="reloadDeckImage(this, 'deck51/deck-back.jpeg')">
+<center><p>CARTAS <br> FOCUS FRANCO-ATIRADOR</p></center>
+
+                    <button onclick="reshuffleDeck(51)">Recolher</button>
+                    <button onclick="openCardSelector(51)">Selecionar Carta</button>
+                </div>
+
+
+
+  
+
+ 
+
+<br><br><br>
+<b>__________________________</b>
+    
+ <br>
+
+
+
+<div class="deck">
+                    <img src="deck18/deck-back.jpeg" alt="Deck 18" class="deck-back" onclick="drawCard(18)" onerror="reloadDeckImage(this, 'deck18/deck-back.jpeg')">
+<center><p>CARTAS <br> DESCOBERTA</p></center>
+
+                    <button onclick="reshuffleDeck(18)">Recolher</button>
+                  <button onclick="openCardSelector(18)">Selecionar Carta</button>
+                </div>
+                    
+
+
+<div class="deck">
+                    <img src="deck40/deck-back.jpeg" alt="Deck 40" class="deck-back" onclick="drawCard(40)" onerror="reloadDeckImage(this, 'deck40/deck-back.jpeg')">
+<center><p>CARTAS <br> EVENTOS</p></center>
+
+                    <button onclick="reshuffleDeck(40)">Recolher</button>
+                    <button onclick="openCardSelector(40)">Selecionar Carta</button>
+                </div>
+
+
+<div class="deck">
+                    <img src="deck58/deck-back.jpeg" alt="Deck 58" class="deck-back" onclick="drawCard(58)" onerror="reloadDeckImage(this, 'deck58/deck-back.jpeg')">
+<center><p>CARTAS <br> OBJETIVOS</p></center>
+
+                    <button onclick="reshuffleDeck(58)">Recolher</button>
+                    <button onclick="openCardSelector(58)">Selecionar Carta</button>
+                </div>
+
+
+
+
+
+  <div class="deck">
+                    <img src="deck56/deck-back.jpeg" alt="Deck 56" class="deck-back" onclick="drawCard(56)" onerror="reloadDeckImage(this, 'deck56/deck-back.jpeg')">
+<center><p>AMEAÇAS</p></center>
+
+                    <button onclick="reshuffleDeck(56)">Recolher</button>
+                    <button onclick="openCardSelector(56)">Selecionar Carta</button>
+                </div>
+
+
+
+
+<br><br><br>
+<b>__________________________</b>
+    
+ <br>
+
+
+
+
+
+<div class="deck">
+                    <img src="deck64/deck-back.jpeg" alt="Deck 64" class="deck-back" onclick="drawCard(64)" onerror="reloadDeckImage(this, 'deck64/deck-back.jpeg')">
+<center><p>MONSTROS <br> FILHOS DE TIFÃO</p></center>
+
+                    <button onclick="reshuffleDeck(64)">Recolher</button>
+                    <button onclick="openCardSelector(64)">Selecionar Carta</button>
+                </div>
+
+
+<div class="deck">
+                    <img src="deck53/deck-back.jpeg" alt="Deck 53" class="deck-back" onclick="drawCard(53)" onerror="reloadDeckImage(this, 'deck53/deck-back.jpeg')">
+<center><p>MONSTROS <br> INFECTADOS</p></center>
+
+                    <button onclick="reshuffleDeck(53)">Recolher</button>
+                    <button onclick="openCardSelector(53)">Selecionar Carta</button>
+                </div>
+
+
+<div class="deck">
+                    <img src="deck48/deck-back.jpeg" alt="Deck 48" class="deck-back" onclick="drawCard(48)" onerror="reloadDeckImage(this, 'deck48/deck-back.jpeg')">
+<center><p>MONSTROS <br> APARIÇÕES</p></center>
+
+                    <button onclick="reshuffleDeck(48)">Recolher</button>
+                    <button onclick="openCardSelector(48)">Selecionar Carta</button>
+                </div>
+
+
+-->
+
+
+
+
+
+
+<!--
+<br><br><br>
+<b>__________________________</b>
+    
+<div><b>MINIATURAS:&nbsp;&nbsp;&nbsp;&nbsp;</b></div>
+ <br>
+
+          
+
+<div class="deck">
+                    <img src="deck49/deck-back.jpeg" alt="Deck 49" class="deck-back" onclick="drawCard(49)" onerror="reloadDeckImage(this, 'deck49/deck-back.jpeg')">
+<center><p>MINIATURA</p></center>
+
+                    <button onclick="reshuffleDeck(49)">Recolher</button>
+                    <button onclick="openCardSelector(49)">Selecionar Carta</button>
+                </div>
+
+
+
+
+
+<!--
+
+<div class="deck">
+                    <img src="deck4/deck-back.jpeg" alt="Deck 4" class="deck-back" onclick="drawCard(4)" onerror="reloadDeckImage(this, 'deck4/deck-back.jpeg')">
+<center><p>MINIATURAS MONSTROS</p></center>
+
+                    <button onclick="reshuffleDeck(4)">Recolher</button>
+                    <button onclick="openCardSelector(4)">Selecionar Carta</button>
+                </div>
+
+
+
+
+
+
+<br><br><br>
+<b>__________________________</b>
+    
+
+<div><b>COMPONENTES e FICHAS:</b></div>
+ <br>
+
+
+
+<div class="deck">
+                    <img src="deck2/deck-back.jpeg" alt="Deck 2" class="deck-back" onclick="drawCard(2)" onerror="reloadDeckImage(this, 'deck2/deck-back.jpeg')">
+<center><p>FICHAS</p></center>
+
+                    <button onclick="reshuffleDeck(2)">Recolher</button>
+                    <button onclick="openCardSelector(2)">Selecionar Carta</button>
+                </div>
+
+ 
+<div class="deck">
+                    <img src="deck66/deck-back.jpeg" alt="Deck 66" class="deck-back" onclick="drawCard(66)" onerror="reloadDeckImage(this, 'deck66/deck-back.jpeg')">
+<center><p>TABELA <br> CONVERSORA</p></center>
+
+                    <button onclick="reshuffleDeck(66)">Recolher</button>
+                    <button onclick="openCardSelector(66)">Selecionar Carta</button>
+                </div>
+
+
+
+<div class="deck">
+                    <img src="deck5/deck-back.jpeg" alt="Deck 5" class="deck-back" onclick="drawCard(5)" onerror="reloadDeckImage(this, 'deck5/deck-back.jpeg')">
+<center><p>COMPONENTES</p></center>
+
+                    <button onclick="reshuffleDeck(5)">Recolher</button>
+                <button onclick="openCardSelector(5)">Selecionar Carta</button>
+                </div>
+
+
+
+
+
+ 
+ <div class="deck">
+                    <img src="deck68/deck-back.jpeg" alt="Deck 68" class="deck-back" onclick="drawCard(68)" onerror="reloadDeckImage(this, 'deck68/deck-back.jpeg')">
+<center><p>MARCADORES DE ENTRADA</p></center>
+
+                    <button onclick="reshuffleDeck(68)">Recolher</button>
+                    <button onclick="openCardSelector(68)">Selecionar Carta</button>
+                </div>
+ 
+
+     <!--
+              <div class="deck">
+                    <img src="deck6/deck-back.jpeg" alt="Deck 6" class="deck-back" onclick="drawCard(6)" onerror="reloadDeckImage(this, 'deck6/deck-back.jpeg')">
+    <p>REGRAS</p>
+                    <button onclick="reshuffleDeck(6)">Recolher</button>
+                    <button onclick="openCardSelector(6)">Selecionar Carta</button>
+                </div>  
+             
+-->
+
+
+
+
+<!--
+ <br><br><br>
+<b>__________________________</b>
+    
+
+<div><b>DADOS PERSONALIZADOS</b></div>
+<br>
+
+<div class="deck">
+                    <img src="deck17/deck-back.jpeg" alt="Deck 17" class="deck-back" onclick="drawCard(17)" onerror="reloadDeckImage(this, 'deck17/deck-back.jpeg')">
+<center><p>DADO 1</p></center>
+
+                    <button onclick="reshuffleDeck(17)">Recolher</button>
+                    <button onclick="openCardSelector(17)">Selecionar Carta</button>
+                </div>
+ 
+
+<div class="deck">
+                    <img src="deck67/deck-back.jpeg" alt="Deck 67" class="deck-back" onclick="drawCard(67)" onerror="reloadDeckImage(this, 'deck67/deck-back.jpeg')">
+<center><p>DADO 1</p></center>
+
+                    <button onclick="reshuffleDeck(67)">Recolher</button>
+                    <button onclick="openCardSelector(67)">Selecionar Carta</button>
+                </div>
+ 
+
+
+  <!--
+  <div class="deck">
+                    <img src="deck4/deck-back.jpeg" alt="Deck 4" class="deck-back" onclick="drawCard(4)" onerror="reloadDeckImage(this, 'deck4/deck-back.jpeg')">
+<center><p>OPCIONAIS</p></center>
+
+                    <button onclick="reshuffleDeck(4)">Recolher</button>
+                    <button onclick="openCardSelector(4)">Selecionar Carta</button>
+                </div>
+-->
+
+
+
+<!--
+
+                <div class="deck">
+                    <img src="deck5/deck-back.jpeg" alt="Deck 5" class="deck-back" onclick="drawCard(5)" onerror="reloadDeckImage(this, 'deck5/deck-back.jpeg')">
+    <p>DUNGEON EXTRA</p>
+                    <button onclick="reshuffleDeck(5)">Recolher</button>
+                    <button onclick="openCardSelector(5)">Selecionar Carta</button>
+                </div>
+
+   <div class="deck">
+                    <img src="deck6/deck-back.jpeg" alt="Deck 6" class="deck-back" onclick="drawCard(6)" onerror="reloadDeckImage(this, 'deck6/deck-back.jpeg')">
+    <p>FICHAS</p>
+                    <button onclick="reshuffleDeck(6)">Recolher</button>
+                    <button onclick="openCardSelector(6)">Selecionar Carta</button>
+                </div>
+
+
+-->
+
+
+
+
+
+
+
+<!--
+<br><br><br>
+<b>__________________________</b>
+
+ 
+<div><b>DECKS CRIADOS:</b></div>
+  --> 
+<div id="decks_dinamicos" style="">  </div>
+
+
+
+
+   <!--   
+ <br><br><br>
+<b>__________________________</b>
+
+    
+<div><b>OUTROS DECKS OPCIONAIS:</b></div>
+   <br>
+
+
+    
+
+
+
+
+
+
+
+
+
+
+<div class="deck">
+                    <img src="deck2/deck-back.jpeg" alt="Deck 2" class="deck-back" onclick="drawCard(2)" onerror="reloadDeckImage(this, 'deck2/deck-back.jpeg')">
+<center><p>EXPANSÃO 1 MARCADORES: BLIGHT & BOTHER </p></center>
+
+                    <button onclick="reshuffleDeck(2)">Recolher</button>
+                    <button onclick="openCardSelector(2)">Selecionar Carta</button>
+                </div>
+
+-->
+
+
+
+
+<br><br><br>
+<b>__________________________</b>
+
+
+
+
+<div class="deck">
+                    <img src="deck44/deck-back.jpeg" alt="Deck 44" class="deck-back" onclick="drawCard(44)" onerror="reloadDeckImage(this, 'deck44/deck-back.jpeg')">
+    <p>DESCARTE</p>
+               <!--     <button onclick="reshuffleDeck(44)">Recolher</button> -->
+<button onclick="openDeck44Selector()">Selecionar Carta do Descarte!</button>
+
+                </div>
+
+      
+
+
+ 
+                
+ <br><br><br>
+<b>__________________________</b>              
+                
+                
+                
+                
+
+       <div> <center><b>MANUAIS  POPUP  FLUTUANTES:</b></center><br><br></div>
+
+   
+<!-- Abaixo os botões para abrir as popup das regras e dos eventos -->                
+<button id="abrir-popup1"  style="border: 2px solid white; background-color: darkred; ">📋 <b><br> REGRAS</b></button>
+
+<pre> <!-- <pre> deixa o texto exatamente como descrito no codigo de diagração!Testando aqui para pular de linha-->
+</pre>
+    
+<script>
+document.getElementById('abrir-popup1').addEventListener('click', () => {
+    const fakeCard = document.createElement('div');
+    fakeCard.setAttribute('data-original-src', 'deck66/card1.jpeg');
+    fakeCard.setAttribute('data-rotation', '0');
+    fakeCard.setAttribute('data-flipped', 'false');
+    
+    openPopupZoom(fakeCard, { loadAllPages: true }); // ADICIONADO AQUI
+});
+</script>  
+
+
+
+ <!-- Abaixo os botões para abrir as popup das regras e dos eventos     -->
+      
+<button id="abrir-popup2"  style="border: 2px solid white; background-color: darkred; ">📋 <b><br> AJUDA <br>RAPIDA</b></button>
+<pre> <!-- <pre> deixa o texto exatamente como descrito no codigo de diagração!Testando aqui para pular de linha-->
+</pre>
+<script>
+document.getElementById('abrir-popup2').addEventListener('click', () => {
+    const fakeCard = document.createElement('div');
+    fakeCard.setAttribute('data-original-src', 'deck65/card1.jpeg');
+    fakeCard.setAttribute('data-rotation', '0');
+    fakeCard.setAttribute('data-flipped', 'false');
+    
+    openPopupZoom(fakeCard, { loadAllPages: true }); // ADICIONADO AQUI
+});
+</script>
+    
+
+
+    <br><br><br><br> 
+<b>__________________________</b>
+    
+<div><b>TOKENS GERAIS:</b><br><br></div>
+
+
+
+
+                <div class="deck">
+                    <img src="deck9/card1.jpeg" alt="Deck 9" class="deck-back" onclick="drawCard(9)" onerror="reloadDeckImage(this, 'deck9/deck-back.jpeg')">
+   <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(9)">Recolher</button>
+                 <!--    <button onclick="openCardSelector(9)">Selecionar Carta</button>  -->
+                </div>
+                <div class="deck">
+                    <img src="deck10/card1.jpeg" alt="Deck 10" class="deck-back" onclick="drawCard(10)" onerror="reloadDeckImage(this, 'deck10/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(10)">Recolher</button>
+              <!--       <button onclick="openCardSelector(10)">Selecionar Carta</button> -->
+                </div>
+                <div class="deck">
+                    <img src="deck11/card1.jpeg" alt="Deck 11" class="deck-back" onclick="drawCard(11)" onerror="reloadDeckImage(this, 'deck11/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(11)">Recolher</button>
+               <!--      <button onclick="openCardSelector(11)">Selecionar Carta</button> -->
+                </div>
+                    <div class="deck">
+                    <img src="deck14/card1.jpeg" alt="Deck 14" class="deck-back" onclick="drawCard(14)" onerror="reloadDeckImage(this, 'deck14/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(14)">Recolher</button>
+             <!--        <button onclick="openCardSelector(14)">Selecionar Carta</button> -->
+                </div>
+                   <div class="deck">
+                    <img src="deck13/card1.jpeg" alt="Deck 13" class="deck-back" onclick="drawCard(13)" onerror="reloadDeckImage(this, 'deck13/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(13)">Recolher</button>
+               <!--      <button onclick="openCardSelector(13)">Selecionar Carta</button> -->
+                </div>
+
+
+<div class="deck">
+                    <img src="deck43/card1.jpeg" alt="Deck 43" class="deck-back" onclick="drawCard(43)" onerror="reloadDeckImage(this, 'deck43/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(43)">Recolher</button>
+                <!--     <button onclick="openCardSelector(43)">Selecionar Carta</button> -->
+                </div>
+
+
+
+
+
+ <div class="deck">
+                    <img src="deck12/card1.jpeg" alt="Deck 12" class="deck-back" onclick="drawCard(12)" onerror="reloadDeckImage(this, 'deck12/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(12)">Recolher</button>
+            <!--         <button onclick="openCardSelector(12)">Selecionar Carta</button> -->
+                </div>
+
+<div class="deck">
+                    <img src="deck8/card1.jpeg" alt="Deck 8" class="deck-back" onclick="drawCard(8)" onerror="reloadDeckImage(this, 'deck8/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(8)">Recolher</button>
+             <!--        <button onclick="openCardSelector(8)">Selecionar Carta</button> -->
+                </div>
+
+<div class="deck">
+                    <img src="deck7/deck-back.jpeg" alt="Deck 7" class="deck-back" onclick="drawCard(7)" onerror="reloadDeckImage(this, 'deck7/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(7)">Recolher</button>
+               <!--      <button onclick="openCardSelector(7)">Selecionar Carta</button>  -->
+                </div>             
+                
+ <div class="deck">
+                    <img src="deck69/deck-back.jpeg" alt="Deck 69" class="deck-back" onclick="drawCard(69)" onerror="reloadDeckImage(this, 'deck69/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(69)">Recolher</button>
+               <!--      <button onclick="openCardSelector(69)">Selecionar Carta</button>  -->
+                </div>   
+                
+                
+          <div class="deck">
+                    <img src="deck71/deck-back.jpeg" alt="Deck 71" class="deck-back" onclick="drawCard(71)" onerror="reloadDeckImage(this, 'deck71/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(71)">Recolher</button>
+               <!--      <button onclick="openCardSelector(71)">Selecionar Carta</button>  -->
+                </div>         
+                
+                
+                
+                    
+                                   
+<div class="deck">
+                    <img src="deck19/deck-back.jpeg" alt="Deck 19" class="deck-back" onclick="drawCard(19)" onerror="reloadDeckImage(this, 'deck19/deck-back.jpeg')">
+    <center><p>MARCADORES<br>LOCAIS</p></center>
+                    <button onclick="reshuffleDeck(19)">Recolher</button>
+                 <button onclick="openCardSelector(19)">Selecionar Carta</button>
+                </div>
+                
+  <div class="deck">
+                    <img src="deck36/deck-back.jpeg" alt="Deck 36" class="deck-back" onclick="drawCard(36)" onerror="reloadDeckImage(this, 'deck36/deck-back.jpeg')">
+<center><p>MARCADORES<br>PRETO<br>ou<br>VERMELHO</p></center>
+
+                    <button onclick="reshuffleDeck(36)">Recolher</button>
+                  <!--  <button onclick="openCardSelector(36)">Selecionar Carta</button> -->
+                </div>              
+                
+              <div class="deck">
+                    <img src="deck24/deck-back.jpeg" alt="Deck 24" class="deck-back" onclick="drawCard(24)" onerror="reloadDeckImage(this, 'deck24/deck-back.jpeg')">
+    <p>FOGUETE</p>
+                    <button onclick="reshuffleDeck(24)">Recolher</button>
+                <!--     <button onclick="openCardSelector(24)">Selecionar Carta</button> -->
+                </div>
+  
+                
+                
+
+
+<div class="deck">
+                    <img src="deck38/card1.jpeg" alt="Deck 38" class="deck-back" onclick="drawCard(38)" onerror="reloadDeckImage(this, 'deck38/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(38)">Recolher</button>
+               <!--      <button onclick="openCardSelector(38)">Selecionar Carta</button> -->
+                </div>
+                 
+                
+                <div class="deck">
+                    <img src="deck39/card1.jpeg" alt="Deck 39" class="deck-back" onclick="drawCard(39)" onerror="reloadDeckImage(this, 'deck39/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(39)">Recolher</button>
+           <!--          <button onclick="openCardSelector(39)">Selecionar Carta</button> -->
+                </div>
+
+<div class="deck">
+                    <img src="deck37/card1.jpeg" alt="Deck 37" class="deck-back" onclick="drawCard(37)" onerror="reloadDeckImage(this, 'deck37/deck-back.jpeg')">
+    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(37)">Recolher</button>
+                <!--     <button onclick="openCardSelector(37)">Selecionar Carta</button> -->
+                </div>
+            
+                
+  <div class="deck">
+                    <img src="deck72/card1.jpeg" alt="Deck 72" class="deck-back" onclick="drawCard(72)" onerror="reloadDeckImage(this, 'deck72/deck-back.jpeg')">
+    <p>CAMINHADA</p>
+                    <button onclick="reshuffleDeck(72)">Recolher</button>
+                <!--     <button onclick="openCardSelector(72)">Selecionar Carta</button> -->
+                </div>              
+                
+                
+                
+
+<div class="deck">
+                    <img src="deck35/card1.jpeg" alt="Deck 35" class="deck-back" onclick="drawCard(35)" onerror="reloadDeckImage(this, 'deck35/deck-back.jpeg')">
+    <p>EGGS</p>
+                    <button onclick="reshuffleDeck(35)">Recolher</button>
+                <!--     <button onclick="openCardSelector(35)">Selecionar Carta</button> -->
+                </div>
+
+
+ <div class="deck">
+                    <img src="deck55/deck-back.jpeg" alt="Deck 55" class="deck-back" onclick="drawCard(55)" onerror="reloadDeckImage(this, 'deck55/deck-back.jpeg')">
+    <center><p>MINIATURAS<br>PERSONAGENS</p></center>
+                    <button onclick="reshuffleDeck(55)">Embaralhar</button>
+                    <button onclick="openCardSelector(55)">Selecionar Carta</button>
+                </div>
+       
+        <div class="deck">
+                    <img src="deck54/deck-back.jpeg" alt="Deck 54" class="deck-back" onclick="drawCard(54)" onerror="reloadDeckImage(this, 'deck54/deck-back.jpeg')">
+    <center><p>MINIATURAS<br>INIMIGOS</p></center>
+                    <button onclick="reshuffleDeck(54)">Embaralhar</button>
+                    <button onclick="openCardSelector(54)">Selecionar Carta</button>
+                </div>
+
+
+
+<div class="deck">
+                    <img src="deck20/deck-back.jpeg" alt="Deck 20" class="deck-back" onclick="drawCard(20)" onerror="reloadDeckImage(this, 'deck20/deck-back.jpeg')">
+<center><p>MINIATURA ZUMBI VERDE</p></center>
+
+                    <button onclick="reshuffleDeck(20)">Recolher</button>
+                    <button onclick="openCardSelector(20)">Selecionar Carta</button>
+                </div>
+
+
+
+    <div class="deck">
+                    <img src="deck21/deck-back.jpeg" alt="Deck 21" class="deck-back" onclick="drawCard(21)" onerror="reloadDeckImage(this, 'deck21/deck-back.jpeg')">
+<center><p>MINIATURA ZUMBI AZUL</p></center>
+
+                    <button onclick="reshuffleDeck(21)">Recolher</button>
+                    <button onclick="openCardSelector(21)">Selecionar Carta</button>
+                </div>
+
+    <div class="deck">
+                    <img src="deck22/deck-back.jpeg" alt="Deck 22" class="deck-back" onclick="drawCard(22)" onerror="reloadDeckImage(this, 'deck22/deck-back.jpeg')">
+<center><p>MINIATURA ZUMBI AMARELO</p></center>
+
+                    <button onclick="reshuffleDeck(22)">Recolher</button>
+                    <button onclick="openCardSelector(22)">Selecionar Carta</button>
+                </div>
+
+ <div class="deck">
+                    <img src="deck23/deck-back.jpeg" alt="Deck 23" class="deck-back" onclick="drawCard(23)" onerror="reloadDeckImage(this, 'deck23/deck-back.jpeg')">
+<center><p>MINIATURA ZUMBI BRANCO</p></center>
+
+                    <button onclick="reshuffleDeck(23)">Recolher</button>
+                    <button onclick="openCardSelector(23)">Selecionar Carta</button>
+                </div>
+                    
+
+
+                    
+
+
+                    
+
+
+
+
+
+
+
+
+
+
+
+
+
+     <br><br><br>
+<b>__________________________</b>
+    
+
+<div><b>DADOS GERAIS:</b><br><br></div>
+
+<!--
+<div class="deck">
+                    <img src="deck17/deck-back.jpeg" alt="Deck 17" class="deck-back" onclick="drawCard(17)" onerror="reloadDeckImage(this, 'deck17/deck-back.jpeg')">
+    <p>DADO ZOMBICIDE TYNE</p>
+                    <button onclick="reshuffleDeck(17)">Recolher</button>
+               
+                </div>
+
+                
+                    
+<div class="deck">
+                    <img src="deck19/deck-back.jpeg" alt="Deck 19" class="deck-back" onclick="drawCard(19)" onerror="reloadDeckImage(this, 'deck19/deck-back.jpeg')">
+    <p>DADO de ORC/GOBLIN</p>
+                    <button onclick="reshuffleDeck(19)">Recolher</button>
+              
+                </div>
+                   
+
+<div class="deck">
+                    <img src="deck18/de<script>
+    // Bloqueia o botão direito apenas na área com o id "table-area"
+    document.getElementById('table-area').addEventListener('contextmenu', function(event) {
+        event.preventDefault();  // Impede o menu de contexto de abrir
+        alert("O botão direito está desabilitado nesta área.");
+    });
+</script>ck-back.jpeg" alt="Deck 18" class="deck-back" onclick="drawCard(18)" onerror="reloadDeckImage(this, 'deck18/deck-back.jpeg')">
+    <p>DADO de LUTA</p>
+                    <button onclick="reshuffleDeck(18)">Recolher</button>
+               
+                </div>
+-->
+
+
+
+
+
+
+
+                    
+<!-- 5° deck TESTE DADO a aparecer à esquerda -->
+<div class="deck">
+                    <img src="deck16/deck-back.jpeg" alt="Deck 16" class="deck-back" onclick="drawCard(16)" onerror="reloadDeckImage(this, 'deck16/deck-back.jpeg')">
+    <p>D6</p>
+                    <button onclick="reshuffleDeck(16)">Recolher</button>
+               <!--      <button onclick="openCardSelector(16)">Selecionar Carta</button> -->
+                </div>
+                    
+
+<!-- 6° deck TESTE DADO a aparecer à esquerda -->
+<div class="deck">
+                    <img src="deck30/deck-back.jpeg" alt="Deck 30" class="deck-back" onclick="drawCard(30)" onerror="reloadDeckImage(this, 'deck30/deck-back.jpeg')">
+    <p>D6</p>
+                    <button onclick="reshuffleDeck(30)">Recolher</button>
+                 <!--    <button onclick="openCardSelector(30)">Selecionar Carta</button> -->
+                </div>
+  
+
+<!-- 7° deck TESTE DADO a aparecer à esquerda -->
+<div class="deck">
+                    <img src="deck31/deck-back.jpeg" alt="Deck 31" class="deck-back" onclick="drawCard(31)" onerror="reloadDeckImage(this, 'deck31/deck-back.jpeg')">
+    <p>D6</p>
+                    <button onclick="reshuffleDeck(31)">Recolher</button>
+             <!--        <button onclick="openCardSelector(31)">Selecionar Carta</button> -->
+                </div>
+
+
+<!-- 8° deck TESTE DADO a aparecer à esquerda -->
+<div class="deck">
+                    <img src="deck32/deck-back.jpeg" alt="Deck 32" class="deck-back" onclick="drawCard(32)" onerror="reloadDeckImage(this, 'deck32/deck-back.jpeg')">
+    <p>D6</p>
+                    <button onclick="reshuffleDeck(32)">Recolher</button>
+              <!--       <button onclick="openCardSelector(32)">Selecionar Carta</button> -->
+                </div>
+
+
+<!-- 9° deck TESTE DADO a aparecer à esquerda -->
+<div class="deck">
+                    <img src="deck33/deck-back.jpeg" alt="Deck 33" class="deck-back" onclick="drawCard(33)" onerror="reloadDeckImage(this, 'deck33/deck-back.jpeg')">
+    <p>D6</p>
+                    <button onclick="reshuffleDeck(33)">Recolher</button>
+               <!--      <button onclick="openCardSelector(33)">Selecionar Carta</button> -->
+                </div>
+
+
+<div class="deck">
+                    <img src="deck34/deck-back.jpeg" alt="Deck 34" class="deck-back" onclick="drawCard(34)" onerror="reloadDeckImage(this, 'deck34/deck-back.jpeg')">
+    <p>D6</p>
+                    <button onclick="reshuffleDeck(34)">Recolher</button>
+                 <!--    <button onclick="openCardSelector(34)">Selecionar Carta</button> -->
+                </div>
+
+
+<div class="deck">
+                    <img src="deck42/deck-back.jpeg" alt="Deck 42" class="deck-back" onclick="drawCard(42)" onerror="reloadDeckImage(this, 'deck42/deck-back.jpeg')">
+    <p>D6</p>
+    
+    <script>
+    // Bloqueia o botão direito apenas na área com o id "table-area"
+    document.getElementById('table-area').addEventListener('contextmenu', function(event) {
+        event.preventDefault();  // Impede o menu de contexto de abrir
+        alert("O botão direito está desabilitado nesta área.");
+    });
+</script>
+                    <button onclick="reshuffleDeck(42)">Recolher</button>
+                 <!--    <button onclick="openCardSelector(42)">Selecionar Carta</button> -->
+                </div>
+
+
+
+
+
+
+
+<div class="deck">
+                    <img src="deck46/deck-back.jpeg" alt="Deck 46" class="deck-back" onclick="drawCard(46)" onerror="reloadDeckImage(this, 'deck46/deck-back.jpeg')">
+    <p>D20</p>
+                    <button onclick="reshuffleDeck(46)">Recolher</button>
+                 <!--    <button onclick="openCardSelector(46)">Selecionar Carta</button> -->
+                </div>
+
+
+
+
+<div class="deck">
+                    <img src="deck45/deck-back.jpeg" alt="Deck 45" class="deck-back" onclick="drawCard(45)" onerror="reloadDeckImage(this, 'deck45/deck-back.jpeg')">
+    <p>D20</p>
+ <button onclick="reshuffleDeck(45)">Recolher</button>
+                 <!--    <button onclick="openCardSelector(46)">Selecionar Carta</button> -->
+                </div>
+                    
+
+
+<div class="deck">
+                    <img src="deck41/deck-back.jpeg" alt="Deck 41" class="deck-back" onclick="drawCard(41)" onerror="reloadDeckImage(this, 'deck41/deck-back.jpeg')">
+    <p>D4</p>
+                    <button onclick="reshuffleDeck(41)">Recolher</button>
+                 <!--    <button onclick="openCardSelector(46)">Selecionar Carta</button> -->
+                </div>
+
+
+<div class="deck">
+                    <img src="deck47/deck-back.jpeg" alt="Deck 47" class="deck-back" onclick="drawCard(47)" onerror="reloadDeckImage(this, 'deck47/deck-back.jpeg')">
+    <p>D8</p>
+                    <button onclick="reshuffleDeck(47)">Recolher</button>
+                 <!--    <button onclick="openCardSelector(47)">Selecionar Carta</button> -->
+                </div>
+
+
+
+<div class="deck">
+                    <img src="deck61/deck-back.jpeg" alt="Deck 61" class="deck-back" onclick="drawCard(61)" onerror="reloadDeckImage(this, 'deck61/deck-back.jpeg')">
+    <p>D12</p>
+                    <button onclick="reshuffleDeck(61)">Recolher</button>
+                 <!--    <button onclick="openCardSelector(47)">Selecionar Carta</button> -->
+                </div>
+
+ 
+
+
+
+
+
+
+          </div>
+        </div>
+
+
+
+
+
+
+
+  <!--     _____________________________________________________________  -->
+
+
+
+
+
+
+
+
+        <!-- Coluna da direita (mesa de jogo) -->
+        <div class="right-column">
+<br>
+
+
+
+
+
+
+
+<script>
+function triggerNotePopup(event) {
+    const fakeEvent = {
+        clientX: event.clientX || window.innerWidth / 2,
+        clientY: event.clientY || window.innerHeight / 2
+    };
+    openPopupNote(fakeEvent);
+}
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+<div id="janelaFlutuante" tabindex="0">
+    <div id="barraTitulo">
+        <span>Regras, Anotações e Vídeos!</span>
+        <button class="botao" id="botaoMinimizar">−</button>
+    </div>
+    <iframe src="dados.html"></iframe> <!-- Substitua por seu URL -->
+</div>
+
+
+
+
+    
+            <div class="table-wrapper" id="table-wrapper" style="border: 2px solid white;">
+                         <div class="table-area" id="table-area">
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- AQUI FICARIA AS IMAGENS FIXAS DA MESA! MAS NÂO CONSEGI AINDA FAZER FUNCIONAR DIREITO -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    <!-- Cartas sorteadas aparecerão aqui -->
+                </div>
+            </div>
+        </div>
+    </div>
+        
+    
+    
+
+     <!-- Botões Undo e Redo -->
+<div style="text-align: center;">
+<div id="undo-container" >
+    <button id="undo-button" style="border: 2px solid white; padding: 5px 10px; background-color: transparent; color: white;"><< UNDO</button>
+    <button id="redo-button" style="border: 2px solid white; padding: 5px 10px; background-color: transparent; color: white;">REDO >></button>
+    
+    <!--
+    <b>--</b>
+    <button id="restore-button" style="border: 2px solid white; padding: 5px 10px; background-color: transparent; color: white;">Restaurar</button>
+    -->
+    
+    
+</div>
+</div>
+
+
+
+<script>
+//simula o clique no botão SALVAR JOGO e depois no CARREGAR O SAVE COLADO NA JANELA
+document.getElementById('restore-button').addEventListener('click', () => {
+    // Buscar o botão "Salvar Jogo" pelo ID
+    const salvarJogoBtn = document.getElementById('salvar1111');  // Usando o ID do botão
+    const carregarSaveBtn = document.querySelector("button[onclick='loadFromBackup()']");  // Supondo que o carregamento ainda esteja por onclick ou com outro seletor
+
+    // Simula o clique no botão "Salvar Jogo"
+    if (salvarJogoBtn) {
+        salvarJogoBtn.click();  // Simula o clique no botão "Salvar Jogo"
+    } else {
+        alert('Botão "Salvar Jogo" não encontrado!');
+    }
+
+    // Aguarda 1 segundo e então simula o clique no botão "Carregar o Save Colado na Janela"
+    setTimeout(() => {
+        if (carregarSaveBtn) {
+            carregarSaveBtn.click();  // Simula o clique no botão "Carregar o Save Colado na Janela"
+        } else {
+            alert('Botão "Carregar o Save Colado na Janela" não encontrado!');
+        }
+    }, 1000);  // 1 segundo de delay
+});
+</script>
+
+
+    </div>
+      
+      
+      
+
+
+<!--
+    <div class="controls">
+        <button onclick="adjustZoom('increase')">Mesa +</button>
+        <button onclick="adjustZoom('decrease')">Mesa -</button>
+    </div>
+
+
+
+        <div class="game-table">
+            <div class="decks-container">
+                <div class="deck">
+                    <img src="deck9/card1.jpeg" alt="Deck 9" class="deck-back" onclick="drawCard(9)" onerror="reloadDeckImage(this, 'deck9/deck-back.jpeg')">
+    <p>TILES</p>
+                    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(9)">Embaralhar</button>
+                    <button onclick="openCardSelector(9)">Selecionar Carta</button>
+                </div>
+                <div class="deck">
+                    <img src="deck10/card1.jpeg" alt="Deck 10" class="deck-back" onclick="drawCard(10)" onerror="reloadDeckImage(this, 'deck10/deck-back.jpeg')">
+    <p>TILES</p>
+                    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(10)">Embaralhar</button>
+                    <button onclick="openCardSelector(10)">Selecionar Carta</button>
+                </div>
+                <div class="deck">
+                    <img src="deck11/card1.jpeg" alt="Deck 11" class="deck-back" onclick="drawCard(11)" onerror="reloadDeckImage(this, 'deck11/deck-back.jpeg')">
+    <p>TILES</p>
+                    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(11)">Embaralhar</button>
+                    <button onclick="openCardSelector(11)">Selecionar Carta</button>
+                </div>
+                    <div class="deck">
+                    <img src="deck14/card1.jpeg" alt="Deck 14" class="deck-back" onclick="drawCard(14)" onerror="reloadDeckImage(this, 'deck14/deck-back.jpeg')">
+    <p>TILES</p>
+                    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(14)">Embaralhar</button>
+                    <button onclick="openCardSelector(14)">Selecionar Carta</button>
+                </div>
+                   <div class="deck">
+                    <img src="deck13/card1.jpeg" alt="Deck 13" class="deck-back" onclick="drawCard(13)" onerror="reloadDeckImage(this, 'deck13/deck-back.jpeg')">
+    <p>TILES</p>
+                    <p>MARCADORES</p>
+                    <button onclick="reshuffleDeck(13)">Embaralhar</button>
+                    <button onclick="openCardSelector(13)">Selecionar Carta</button>
+                </div>
+
+
+
+            </div>
+            </div>
+            
+-->
+
+
+
+
+
+
+
+
+
+<!--
+<br><br><br>
+<iframe width="" height="240" src="https://www.youtube.com/embed/gfOo5sohsZc" title="Mission Patrol - Gameplay Completa [Mesa Virtual]" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+      -->
+          
+              <!--
+  <a href="https://docs.google.com/document/d/18CrweXMfdO4YQoPvHozWKeOmzcs3HTapR91KEIrM6Jg/edit?usp=drivesdk" 
+   target="_blank" 
+   style="color: white; background-color: #444; text-decoration: none; padding: 8px 12px; border-radius: 5px; transition: background-color 0.3s, color 0.3s;"
+   onmouseover="this.style.backgroundColor='#666'; this.style.color='white';" 
+   onmouseout="this.style.backgroundColor='#444'; this.style.color='white';">
+   Anotações Pessoais (Não oficiais)
+   -->
+</a>
+
+ 
+ <!-- <a href="1.pdf" target="_blank">Variante Eventos e Combate [não oficial]</a> 
+<br><br>  -->
+
+
+
+
+
+<div>
+  
+
+
+
+<br><br><br>
+
+
+<div style="text-align: center;">
+<button id="new-game-btn" style="background-color: red; color: white; font-size: 14px; border: 2px solid white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.3s ease;" onmouseover="this.style.backgroundColor='darkred'" onmouseout="this.style.backgroundColor='red'">
+    NOVO JOGO
+</button>
+
+<!-- Botão para salvar no localStorage e gerar o texto de backup -->
+&nbsp;&nbsp;
+<button id="salvar1111" onclick="saveFullPage(); salvarTexto();" 
+        style="border: 2px solid white; padding: 5px 10px; background-color: transparent; color: white;">
+    Salvar Jogo
+</button><b>--</b><button onclick="reloadAndLoadPage()" style="border: 2px solid white; padding: 5px 10px; background-color: transparent; color: white;">Carregar Jogo</button>    <!-- Botão para carregar do localStorage -->
+</div>
+
+<br>
+
+<div style="text-align: center;">
+ <label for="fileInput" 
+       style="background-color: red; color: white; font-size: 14px; border: 2px solid white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.3s ease;">
+    << CARREGAR ARQUIVO DE SAVE >>
+</label>
+<input type="file" id="fileInput" accept=".txt" onchange="carregarTexto()" style="display: none;" />
+</div>
+
+   <script>
+    function salvarTexto() {
+        let textArea = document.getElementById("backupText").value;
+        if (!textArea.trim()) {
+            alert("A área de texto está vazia!");
+            return;
+        }
+
+        // Capturar o título da página e sanitizar para um nome de arquivo válido
+        let titulo = document.title.trim() || "SaveGame";
+
+        // Remover caracteres inválidos para nomes de arquivos
+        titulo = titulo.replace(/[\/\\:*?"<>|]/g, "");  
+
+        // Substituir espaços e outros caracteres problemáticos por _
+        titulo = titulo.replace(/\s+/g, "_");
+
+        // Limitar o tamanho do nome do título (máximo de 15 caracteres)
+        titulo = titulo.substring(0, 15);
+
+        // Capturar data e hora atuais
+        let agora = new Date();
+        let dia = String(agora.getDate()).padStart(2, '0');
+        let mes = String(agora.getMonth() + 1).padStart(2, '0'); // Meses começam do zero
+        let ano = agora.getFullYear();
+        let horas = String(agora.getHours()).padStart(2, '0');
+        let minutos = String(agora.getMinutes()).padStart(2, '0');
+        let segundos = String(agora.getSeconds()).padStart(2, '0');
+
+        // Nome do arquivo no formato: [titulo]_DD-MM-YYYY_HH-MM-SS.txt
+        let nomeArquivo = `${titulo}_${dia}-${mes}-${ano}_${horas}-${minutos}-${segundos}.txt`;
+
+        // Criar arquivo e baixar
+        let blob = new Blob([textArea], { type: "text/plain" });
+        let a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = nomeArquivo;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+  function carregarTexto() {
+    let fileInput = document.getElementById("fileInput");
+    let file = fileInput.files[0];
+
+    if (file) {
+        let reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById("backupText").value = e.target.result;
+            
+            // Aguarda 1 segundo e então simula o clique no botão "Carregar o Save Colado na Janela"
+            setTimeout(() => {
+                let carregarSaveBtn = document.getElementById("carregarSavedaJanela");
+                if (carregarSaveBtn) {
+                    carregarSaveBtn.click();  // Simula o clique no botão "Carregar o Save Colado na Janela"
+                } else {
+                    alert('Botão "Carregar o Save Colado na Janela" não encontrado!');
+                }
+            }, 500);  // 0,5 segundo de delay
+        };
+        reader.readAsText(file);
+    }
+}
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- Caixa de Texto para Backup e Botões -->
+<!-- Caixa de Texto para Backup e Botões -->
+<div style="text-align: center;">
+<div style="margin-top: 20px;">
+    <textarea id="backupText" rows="10" cols="50" placeholder="   O Save aparecerá aqui..." 
+        style="display:none; border: 2px solid gray; padding: 5px;"></textarea>
+    <br>
+    
+    <button onclick="copyBackup()" 
+        style="display:none; border: 2px solid gray; padding: 5px 10px; background-color: transparent; color: white;">
+        Copiar Save da Janela para guardá-lo em algum local (Colar)
+    </button><span style="display:none; color: gray;"><b>--</b></span><button id="carregarSavedaJanela" onclick="loadFromBackup()" 
+        style="display:none; border: 2px solid gray; padding: 5px 10px; background-color: transparent; color: white;">
+        Carregar o Save Colado na Janela
+    </button>
+</div>
+       </div> 
+ 
+   <br><br>
+       
+<div style="display: flex; justify-content: center; gap: 10px;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp
+<button id="setup-btn" style="margin-left: -300px; background-color: green; color: white; font-size: 14px; border: 2px solid white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.3s ease;" onmouseover="this.style.backgroundColor='darkgreen'" onmouseout="this.style.backgroundColor='green'">SETUP 1</button>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- botão para o setup2 incluido --> 
+<button id="setup2-btn" style="background-color: red; color: white; font-size: 14px; border: 2px solid white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.3s ease;" onmouseover="this.style.backgroundColor='darkred'" onmouseout="this.style.backgroundColor='red'">SETUP: <br>MOUNTAIN OF MADNESS</button>
+
+
+</div>
+
+   
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ <!-- Pop-up para seleção de cartas -->
+    <div id="card-selector" class="card-selector hidden">
+        <div id="card-selector-content" class="card-selector-content"></div>
+        <button onclick="closeCardSelector()">Fechar</button>
+    </div>
+
+  
+
+
+
+
+
+<!-- Pop-up de opções para cartas -->
+<div id="card-options" class="card-options hidden">
+    <button id="duplicate-btn" onclick="duplicateCard()">Duplicar</button> <!-- Novo botão -->
+    <button id="delete-btn" onclick="deleteCard()">Enviar para o Deck de Descarte</button> <!-- Novo botão -->
+    <button id="lock-button" onclick="toggleLockCard()">Travar/Destravar no fundo da Mesa</button>
+   <!-- <button id="lockDeck-button" onclick="toggleLockDeck()">Travar/Destravar DECK</button> -->
+<!--    <button id="rotate-btn" onclick="rotateCard()">Rotacionar</button> -->
+    <button id="bring-to-front-btn"button id="flip-btn" onclick="flipCard()">Virar (frente/verso) Carta</button>
+    <button id="group-and-flip-btn" onclick="bringCardToFront()">Sempre no topo</button>
+    <button id="grouping-open-popup-btn" class="grouping-button" onclick="openGroupingOptions()">Agrupamento</button> 
+
+<!-- Botão de agrupamento -->
+<button id="resize-open-popup-btn" 
+        onclick="openResizeOptions_cartas()" 
+        style="background-color: #2C2C2C; color: white; padding: 10px 20px; font-size: 16px; border: 1px solid darkred; border-radius: 5px; transition: background-color 0.3s, border-color 0.3s;"
+        onmouseover="this.style.backgroundColor='darkred'; this.style.borderColor='white';"
+        onmouseout="this.style.backgroundColor='#2C2C2C'; this.style.borderColor='darkred';">
+    Redimensionar
+</button>
+
+
+
+
+
+
+    <button id="return-to-deck-btn" onclick="returnCardToDeck()">Recolher para o Deck à Esquerda</button> 
+<!--
+<button onclick="adjustZoom('increase')"> Mesa +</button>
+<button onclick="adjustZoom('decrease')"> Mesa - </button> 
+-->
+<!--<button id="reload-card-btn" onclick="reloadCardImage()">Recarregar Imagem</button> -->
+
+<button onclick="rotateCard(-22.5)" style="border: 2px solid orange;">Rotacionar Esquerda</button>
+<button onclick="rotateCard(22.5)" style="border: 2px solid orange;">Rotacionar Direita</button>
+
+<button id="mostrar-conteudo-btn">Mostrar Cartas desta pilha</button>
+
+<button id="track-btn" onclick="toggleCardTracking()">Rastrear: OFF</button>
+
+
+               
+<button onclick=" openPopupZoom(selectedCard); closeCardOptions(); " style="border: 2px solid white;">Expandir</button>
+<!--<button id="zoomButton" style="border: 2px solid white;">Zoom na Carta</button> -->
+<!-- <button onclick="rotateCardHorizontally()">Girar Carta Horizontalmente</button> -->
+
+<div id="color-button-wrapper" style="
+  display: inline-block;
+  padding: 2px; 
+  border-radius: 8px;
+  background: linear-gradient(45deg, red, orange, yellow, green, blue, indigo, violet);
+">
+  <div style="
+    background-color: #111;
+    padding: 10px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  ">
+    <!-- Primeira linha: ícone + texto -->
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <span style="color: white;">🎨</span>
+      <span style="color: white;">Cor</span>
+    </div>
+    <!-- Segunda linha: slider -->
+    <input type="range" min="0" max="360" name="hue-range5" value="0" name="hue-range3" name="hue-range" oninput="applyHueToCard(this.value)" style="width: 100px;">
+  </div>
+</div>
+
+
+
+
+
+  <br> <button class="close-button" onclick="closeCardOptions()">Fechar</button>
+
+</div>
+
+
+
+
+<!-- Pop-up de opções para cartas 
+
+<div id="card-options" class="card-options hidden">
+    <button id="duplicate-btn" onclick="duplicateCard()">Duplicar</button> 
+    <button id="delete-btn" onclick="deleteCard()">Apagar</button> 
+    <button id="lock-button" onclick="toggleLockCard()">Travar/Destravar</button>
+    <button id="rotate-btn" onclick="rotateCard()">Rotacionar</button>
+    <button id="bring-to-front-btn" onclick="bringCardToFront()">Trazer para Frente</button>
+    <button id="flip-btn" onclick="flipCard()">Virar Carta</button>
+      <button id="resize-open-popup-btn" onclick="openResizeOptions_cartas()">Redimensionar</button>
+    <button id="reload-card-btn" onclick="reloadCardImage()">Recarregar Imagem</button>
+    <button class="close-button" onclick="closeCardOptions()">Fechar</button>
+</div>
+-->
+
+
+<!-- Pop-up de opções para dados -->
+<div id="card-options2" class="card-options hidden">
+
+<button onclick="rollAllDice()"style="border: 2px solid; 
+               border-image: linear-gradient(to right, red, orange, yellow, green, blue, purple) 1;">Rolar Todos os Dados da mesma Cor</button>
+
+  <!--  <button id="rotate-btn" onclick="rotateCard2()">Rotacionar</button> -->
+    <button id="resize-btn"  class="grouping-button" onclick="openResizeOptions()">Redimensionar</button> <!-- Botão Redimensionar abre função com sub botões -->
+    <button id="dice-select-btn" onclick="openDiceFaceOptions()">Escolher Face do Dado</button> <!-- Botão FACE abre função com sub opções -->
+<!--
+<button onclick="adjustZoom('increase')"> Mesa +</button> 
+<button onclick="adjustZoom('decrease')"> Mesa - </button> 
+-->
+<button id="delete-btn" onclick="deleteCard()">Apagar</button>
+
+
+<button id="grouping-open-popup-btn" class="grouping-button" onclick="openGroupingOptions()">Agrupamento</button> <!-- Botão de agrupamento -->
+ <button id="lock-button" onclick="toggleLockCard()">Travar/Destravar no fundo da Mesa</button>
+<button onclick="rotateCard(-1)" style="border: 2px solid orange;">Rotacionar Esquerda</button>
+<button onclick="rotateCard(1)" style="border: 2px solid orange;">Rotacionar Direita</button>
+<br> 
+ <button id="bring-to-front-btn" onclick="bringCardToFront()">Sempre no Topo</button>
+
+
+<div id="color-button-wrapper" style="
+  display: inline-block;
+  padding: 2px; 
+  border-radius: 8px;
+  background: linear-gradient(45deg, red, orange, yellow, green, blue, indigo, violet);
+">
+  <div style="
+    background-color: #111;
+    padding: 10px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  ">
+    <!-- Primeira linha: ícone + texto -->
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <span style="color: white;">🎨</span>
+      <span style="color: white;">Cor</span>
+    </div>
+    <!-- Segunda linha: slider -->
+    <input type="range" min="0" max="360" value="0" name="hue-range4" name="hue-range2" oninput="applyHueToCard(this.value)" style="width: 100px;">
+  </div>
+</div>
+
+
+
+
+<br> 
+<button class="close-button" onclick="closeCardOptions2()">Fechar</button>
+</div>
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script>
+//versão 1006 do sistema de UNDO - REDO
+let undoStack = []; // Pilha de UNDO
+let redoStack = []; // Pilha de REDO
+let tempoDeEspera = 10800000; // Tempo de espera para debounce 10800000ms=3horas
+let lastSavedState = ""; // Último estado salvo
+const MAX_UNDO_STACK_SIZE = 200; // Limite da pilha de UNDO
+let disableSaves = false; // Variável de controle para desativar os saves
+let preventNextSave = false; // Variável de controle para impedir o próximo save após duplo clique
+let isRestoringFromUndoRedo = false;
+
+// Variável de controle (deve estar no topo do script ou fora das funções)
+let debounceTimeout = null; 
+
+let isPointerDown = false;
+document.addEventListener('pointerdown', () => { isPointerDown = true; });
+document.addEventListener('pointerup', () => { isPointerDown = false; saveState(); });
+
+
+
+
+
+// Função para salvar o estado
+function saveState() {
+    // TRAVA MESTRA: Se o dedo/mouse estiver pressionado, CANCELA o salvamento.
+    // Só salvaremos quando o 'pointerup' disparar.
+    if (disableSaves || isRestoringFromUndoRedo || isPointerDown) return;
+    if (preventNextSave) { preventNextSave = false; return; }
+
+    clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(() => {
+        const tableArea = document.getElementById('table-area');
+        if (!tableArea) return;
+
+        // 1. Limpa o HTML para comparação (Sua lógica de cartasok)
+        let currentHTML = tableArea.innerHTML.replace(/border:\s*\d+px\s+dashed\s+blue;/g, '').trim();
+        
+        // 2. Pega a lousa (Lógica lousaok)
+        const currentLousa = (typeof exportarDesenhoLousa === 'function') ? exportarDesenhoLousa() : null;
+
+        // 3. Só grava se realmente houver mudança e se NÃO estivermos no meio de um movimento
+        if (currentHTML !== lastSavedState) {
+            undoStack.push({ html: currentHTML, lousa: currentLousa });
+            lastSavedState = currentHTML; 
+            redoStack.length = 0; 
+
+            if (undoStack.length > MAX_UNDO_STACK_SIZE) undoStack.shift();
+            updateUndoRedoButtons();
+            console.log("✅ Estado salvo apenas no final do movimento.");
+        }
+    }, 150); // 300ms após soltar o clique/toque
+}
+
+function undo() {
+    if (undoStack.length > 1) {
+        isRestoringFromUndoRedo = true;
+        const tableArea = document.getElementById('table-area');
+
+        // Salva o estado atual no Redo antes de voltar
+        const htmlAtual = tableArea.innerHTML.replace(/border:\s*\d+px\s+dashed\s+blue;/g, '').trim();
+        const lousaAtual = (typeof exportarDesenhoLousa === 'function') ? exportarDesenhoLousa() : null;
+        redoStack.push({ html: htmlAtual, lousa: lousaAtual });
+
+        undoStack.pop();
+        const prevState = undoStack[undoStack.length - 1];
+
+        // Restaura as cartas
+        tableArea.innerHTML = prevState.html;
+        lastSavedState = prevState.html;
+
+        setTimeout(() => {
+            if (prevState.lousa && typeof importarDesenhoLousa === 'function') {
+                importarDesenhoLousa(prevState.lousa);
+            }
+            reativarFuncionalidadesMesa();
+            
+            // Sincroniza para evitar saves falsos pós-reativação
+            lastSavedState = tableArea.innerHTML.replace(/border:\s*\d+px\s+dashed\s+blue;/g, '').trim();
+            
+            isRestoringFromUndoRedo = false;
+            updateUndoRedoButtons();
+        }, 100); 
+    }
+}
+
+function redo() {
+    if (redoStack.length > 0) {
+        isRestoringFromUndoRedo = true;
+        const tableArea = document.getElementById('table-area');
+
+        const nextState = redoStack.pop();
+        
+        const htmlAtual = tableArea.innerHTML.replace(/border:\s*\d+px\s+dashed\s+blue;/g, '').trim();
+        const lousaAtual = (typeof exportarDesenhoLousa === 'function') ? exportarDesenhoLousa() : null;
+        undoStack.push({ html: htmlAtual, lousa: lousaAtual });
+
+        tableArea.innerHTML = nextState.html;
+        lastSavedState = nextState.html;
+
+        setTimeout(() => {
+            if (nextState.lousa && typeof importarDesenhoLousa === 'function') {
+                importarDesenhoLousa(nextState.lousa);
+            }
+            reativarFuncionalidadesMesa();
+            
+            lastSavedState = tableArea.innerHTML.replace(/border:\s*\d+px\s+dashed\s+blue;/g, '').trim();
+            
+            isRestoringFromUndoRedo = false;
+            updateUndoRedoButtons();
+        }, 100);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+// Função para atualizar os botões de UNDO e REDO
+// Função para atualizar os botões de UNDO e REDO
+function updateUndoRedoButtons() {
+    const undoButton = document.getElementById('undo-button');
+    const redoButton = document.getElementById('redo-button');
+
+    undoButton.disabled = undoStack.length <= 1;
+    redoButton.disabled = redoStack.length === 0;
+}
+
+// Função para adicionar suporte a clique e toque nos botões
+// Função para adicionar suporte apenas a clique nos botões (evita disparar ao deslizar no telemóvel)
+function setupUndoRedoButtons() {
+    const undoButton = document.getElementById('undo-button');
+    const redoButton = document.getElementById('redo-button');
+
+    if (undoButton && redoButton) {
+        undoButton.addEventListener("click", (event) => {
+            // Removemos o preventDefault para permitir o comportamento nativo de clique
+            undo();
+        });
+
+        redoButton.addEventListener("click", (event) => {
+            redo();
+        });
+    }
+}
+
+
+
+
+
+
+// Configura os botões de UNDO e REDO ao carregar a página
+document.addEventListener("DOMContentLoaded", setupUndoRedoButtons);
+
+
+
+
+
+
+
+
+
+// Observador de mudanças na tabela
+function setupTableObserver() {
+    const tableArea = document.getElementById('table-area');
+
+    const observer = new MutationObserver((mutations) => {
+        let stateChanged = false;
+
+        mutations.forEach((mutation) => {
+            if (mutation.type === "childList") {
+                mutation.addedNodes.forEach(node => console.log(`➕ Adicionado: ${node.nodeName}`));
+                mutation.removedNodes.forEach(node => console.log(`➖ Removido: ${node.nodeName}`));
+                stateChanged = true;
+            }
+
+            if (mutation.type === "attributes") {
+                // Verifica se o atributo alterado é 'data-rotation' ou 'data-flipped'
+                if (mutation.attributeName === "data-rotation" || mutation.attributeName === "data-flipped") {
+                    console.log(`⚙ Atributo alterado: ${mutation.attributeName}`);
+                    stateChanged = true;
+                }
+
+                // Ignora alterações de estilo em imagens
+                if (mutation.target.tagName === "IMG" && mutation.attributeName === "style") return;
+            }
+        });
+
+        if (stateChanged) {
+            debouncedSaveState(); // Chama a função de salvar o estado com debounce
+        }
+    });
+
+    observer.observe(tableArea, {
+        childList: true,  // Observa adições ou remoções de nós
+        subtree: true,    // Observa todos os elementos abaixo do tableArea
+        attributes: true, // Observa mudanças de atributos
+    });
+}
+
+
+
+
+// Variável para armazenar o tempo do último clique
+let lastClickTime = 0; 
+let isDoubleClick = false; // Variável para verificar se é um duplo clique
+
+// Eventos para salvar estado ao terminar ações do usuário com detecção de duplo clique
+document.getElementById('table-area').addEventListener('mouseup', (event) => {
+    const currentTime = new Date().getTime();
+    if (currentTime - lastClickTime <= 500) {  // Verifica se o tempo entre cliques é curto o suficiente para ser considerado um duplo clique
+        isDoubleClick = true; // Detecta duplo clique
+        console.log("⚠️ Duplo clique detectado.");
+        preventNextSave = true; // Impede o próximo save
+        return;  // Não executa o save para o clique simples
+    }
+    lastClickTime = currentTime;  // Atualiza o tempo do último clique
+
+    // Se não for duplo clique, executa o save
+    if (!isDoubleClick) {
+        saveState();
+    }
+});
+
+// Adiciona o mesmo comportamento para toque
+document.getElementById('table-area').addEventListener('touchend', (event) => {
+    const currentTime = new Date().getTime();
+    if (currentTime - lastClickTime <= 500) {  // Detecção de toque duplo
+        isDoubleClick = true; // Detecta duplo toque
+        console.log("⚠️ Duplo toque detectado.");
+        preventNextSave = true; // Impede o próximo save
+        return;  // Não executa o save para o toque simples
+    }
+    lastClickTime = currentTime;  // Atualiza o tempo do último toque
+
+    // Se não for duplo toque, executa o save
+    if (!isDoubleClick) {
+        saveState();
+    }
+});
+
+
+
+
+// ✅ NOVA FUNÇÃO: Captura cliques e toques em imagens FORA da mesa e salva o estado
+function setupOutsideImageClickListener() {
+    document.body.addEventListener("click", (event) => {
+            if (isRestoringFromUndoRedo) return;  // <-- bloqueia save durante UNDO/REDO
+
+        
+        const tableArea = document.getElementById("table-area");
+        const isInsideTable = tableArea.contains(event.target);  // Verifica se o clique foi dentro da mesa
+        const isImage = event.target.tagName === "IMG";  // Verifica se o alvo do clique é uma imagem
+        const isPopup = event.target.closest(".popup");  // Verifica se o clique ocorreu dentro de um popup
+
+        // Verifica se o clique foi fora da mesa ou em uma imagem/popup
+        if (!isInsideTable || isImage || isPopup) {
+            console.log("Clique fora da mesa ou em um popup. Salvando estado...");
+if (!isRestoringFromUndoRedo) {
+    saveState();
+}
+        }
+    });
+
+    // Adiciona suporte para toques em dispositivos móveis (touchstart)
+    document.body.addEventListener("touchstart", (event) => {
+           if (isRestoringFromUndoRedo) return;  // <-- bloqueia save durante UNDO/REDO
+
+       
+        const tableArea = document.getElementById("table-area");
+        const isInsideTable = tableArea.contains(event.target);  // Verifica se o toque foi dentro da mesa
+        const isImage = event.target.tagName === "IMG";  // Verifica se o alvo do toque é uma imagem
+        const isPopup = event.target.closest(".popup");  // Verifica se o toque ocorreu dentro de um popup
+
+        // Verifica se o toque foi fora da mesa ou em uma imagem/popup
+        if (!isInsideTable || isImage || isPopup) {
+            console.log("Toque fora da mesa ou em um popup. Salvando estado...");
+if (!isRestoringFromUndoRedo) {
+    saveState();
+}
+        }
+    });
+}
+
+// Função para restaurar a página
+function restorePage() {
+    console.log("Restaurando a página...");
+    saveState();
+    loadFromBackup();  // Supondo que você tenha essa função
+}
+
+// Salva o estado inicial ao carregar a página
+window.addEventListener('DOMContentLoaded', () => {
+    setupTableObserver();
+    setupOutsideImageClickListener(); // Ativa a nova funcionalidade chamando a função de ao clicar ou tocar numa imagem fora da mesa um save é realizado
+});
+
+
+
+
+function normalizeHTML(html) {
+    // Remove espaços extras, bordas visuais e normaliza aspas
+    return html
+        .replace(/\s+/g, ' ')                       // Remove espaços em excesso
+        .replace(/border:\s*\d+px\s+dashed\s+blue;/g, '') // Remove borda azul
+        .replace(/"/g, "'")                         // Uniformiza aspas
+        .trim();
+}
+
+
+</script>
+               
+                 
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- script que controla a aba a esquerda, ou seja o esconder a coluna da esquerda -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const toggleButton = document.getElementById("toggleSidebar");
+
+    toggleButton.addEventListener("click", function () {
+        // Alterna uma classe no 'body', o CSS cuida de todo o resto (empurrar a mesa e o botão)
+        document.body.classList.toggle("sidebar-hidden");
+
+        // Troca o ícone baseando-se no estado
+        if (document.body.classList.contains("sidebar-hidden")) {
+            toggleButton.innerHTML = "▶"; // Ícone recolhido
+        } else {
+            toggleButton.innerHTML = "◀"; // Ícone expandido
+        }
+    });
+});
+</script>
+
+
+
+
+
+
+
+
+
+
+<div style="display: flex; justify-content: center;">
+    <div style="text-align: center;">
+    
+   
+    
+    
+        <br><br><br>
+        Agradecimentos e Fontes:
+        <br>
+        <font size="1" style="font-size: 12px;">
+            Algumas imagens foram liberadas para uso no jogo pelo autor e depois retrabalhadas: 
+            <a href="https://www.miskasmaps.com/" target="_blank">
+                https://www.miskasmaps.com/
+            </a>
+        </font>
+        <br>
+        <font size="1" style="font-size: 12px;">
+    Algumas imagens foram conseguidas aqui e depois retrabalhadas: 
+    <a href="https://colecciondegifs.blogspot.com/2016/08/imagenes-de" target="_blank">
+        https://colecciondegifs.blogspot.com/2016/08/imagenes-de
+    </a>
+</font>
+        <br><br><br>
+         
+         
+         
+     <div style="padding-left: 25%; text-align: left;">
+  <font size="1" style="font-size: 12px;">
+    <strong>FUNÇÕES DIRETAS VIA TECLADO (Sugiro uso do Teclado Numérico Lateral):</strong><br><br>
+
+    [ SETAS ]; = Movimento fino da carta<br>
+    [ delete ]; = Manda carta para deck de descarte<br>
+    [ , ] = Manda carta para deck de descarte<br>
+    [ + ] = Aumenta o tamanho da carta<br>
+    [ - ] = Diminui o tamanho da carta<br>
+    [ CTRL + ] = Zoom + na mesa<br>
+    [ CTRL - ] = Zoom - na mesa<br>
+    [ 4 ] = Rotaciona para a esquerda<br>
+    [ 6 ] = Rotaciona para a direita<br>
+    [ E ] = Abre popup com carta para visualizar melhor<br>
+    [ T ] = Trava ou destrava uma carta no fundo da mesa<br>
+    [ D ] = Duplica uma carta na mesa<br>
+    [ G ] = Agrupa Cartas sobrepostas para movimento da pilha<br>
+    [ 8 ] = Vira a carta, mostrando seu verso<br>  </font>
+</div>
+
+  
+       
+    </div>
+</div>
+
+
+
+
+
+
+
+
+<script>
+// Abaixo está a função que coloca movimento pelo uso das teclas na carta selecionada!
+function isPC() {
+  const userAgent = navigator.userAgent;
+  return !(/Mobi|Android|iPhone|iPad|iPod|webOS|BlackBerry|Windows Phone/.test(userAgent));
+}
+
+if (isPC()) {
+  console.log("✅ Modo PC detectado. Ativando controle por teclado...");
+  let moveTimeout;
+
+  document.addEventListener('keydown', function(e) {
+    console.log('🟨 Tecla pressionada:', e.key);
+
+    // Bloqueia o scroll da mesa por setas
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      console.log('🛑 Scroll da mesa bloqueado (setas capturadas).');
+    }
+
+    // Impede atalhos se estiver editando
+    if (
+      document.activeElement &&
+      (
+        document.activeElement.tagName === 'INPUT' ||
+        document.activeElement.tagName === 'TEXTAREA' ||
+        document.activeElement.isContentEditable
+      )
+    ) {
+      console.log('🛑 Foco em campo de edição. Ignorando atalhos.');
+      return;
+    }
+
+    if (!window.selectedCard) {
+      console.log('🛑 Nenhuma carta selecionada.');
+      return;
+    }
+
+    const step = 1;
+    let deltaX = 0, deltaY = 0;
+
+    // 🔧 Zoom do grupo com CTRL + ]
+    if (e.ctrlKey && e.key === ']') {
+      console.log('🟩 CTRL + ] → zoom grupo aumentado');
+      zoomGroupSize('increase');
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowUp':    // ⬆️ Movimento fino da carta
+        deltaY = -step;
+        break;
+      case 'ArrowDown':  // ⬇️
+        deltaY = step;
+        break;
+      case 'ArrowLeft':  // ⬅️
+        deltaX = -step;
+        break;
+      case 'ArrowRight': // ➡️
+        deltaX = step;
+        break;
+
+      case 'Delete':     // 🗑️ Manda carta para descarte
+      case ',':
+        console.log('🗑️ Delete ou , → envia carta ao descarte');
+        deleteCard();
+        return;
+
+
+
+
+
+
+
+      case '+':
+      case '=':
+        if (e.ctrlKey) { // Se o CTRL estiver pressionado
+            e.preventDefault(); // Bloqueia o zoom nativo do navegador
+            console.log('🔍 CTRL + → zoom + na mesa');
+            adjustZoom('increase');
+        } else { // Se for apenas o +, aumenta a carta
+            console.log('➕ + → aumenta tamanho da carta');
+            resizeCard('increase', window.selectedCard);
+        }
+        return;
+
+      case '-':
+        if (e.ctrlKey) { // Se o CTRL estiver pressionado
+            e.preventDefault(); // Bloqueia o zoom nativo do navegador
+            console.log('🔎 CTRL - → zoom - na mesa');
+            adjustZoom('decrease');
+        } else { // Se for apenas o -, diminui a carta
+            console.log('➖ - → diminui tamanho da carta');
+            resizeCard('decrease', window.selectedCard);
+        }
+        return;
+      
+      
+      
+      
+      
+      
+      
+      
+      case '4':          // ⟲ Rotaciona para esquerda
+        console.log('⟲ 4 → rotaciona esquerda');
+        rotateCard(-22.5);
+        return;
+
+      case '6':          // ⟳ Rotaciona para direita
+        console.log('⟳ 6 → rotaciona direita');
+        rotateCard(22.5);
+        return;
+
+     case '8':          // 🔄 Vira a carta (verso)
+       case 'v':
+      case 'V':         
+       console.log('🔄 8 v V → vira carta (verso/frente)');
+        flipCard();
+        return;
+
+      case 'e':
+      case 'E':          // 🔍 Abre popup
+        console.log('🔍 E → abrir popup para visualizar');
+        openPopupZoom(window.selectedCard);
+        if (window.selectedCard) {
+          const mesa = document.getElementById('table-area');
+          if (mesa) {
+            mesa.setAttribute('tabindex', '0');
+            // ✅ Adicionado preventScroll aqui também
+            setTimeout(() => mesa.focus({ preventScroll: true }), 100);
+            console.log('✅ Foco restaurado à mesa sem pular a tela.');
+          }
+        }
+      return;
+
+      case 't':
+      case 'T':          // 🔒 Trava ou destrava carta
+        console.log('🔒 T → trava/destrava carta');
+        toggleLockCard();
+        return;                
+        
+        
+        case 'g':
+      case 'G':          // Agrupa Cartas para move-las
+        console.log('G → Agrupa Cartas para move-las');
+        moveDeck();
+        return;
+        
+             
+
+      case 'd':
+      case 'D':          // 📄 Duplica a carta
+        console.log('📄 D → duplica carta');
+        duplicateCard();
+        return;
+
+      default:
+        console.log('🔘 Tecla sem função: ' + e.key);
+        return;
+    }
+
+    moveCardByKeyboard(deltaX, deltaY);
+  });
+
+  function moveCardByKeyboard(deltaX, deltaY) {
+    const card = window.selectedCard;
+
+    if (!card) {
+      console.log('❌ Nenhuma carta para mover.');
+      return;
+    }
+
+    const isLocked = card.getAttribute('data-locked') === 'true';
+    if (isLocked) {
+      console.log('🔒 Carta travada. Movimento bloqueado.');
+      return;
+    }
+
+    let left = parseFloat(card.style.left);
+    let top = parseFloat(card.style.top);
+
+    if (isNaN(left) || isNaN(top)) {
+      const rect = card.getBoundingClientRect();
+      const tableRect = document.getElementById('table-area').getBoundingClientRect();
+
+      left = rect.left - tableRect.left;
+      top = rect.top - tableRect.top;
+
+      card.style.position = 'absolute';
+      card.style.left = left + 'px';
+      card.style.top = top + 'px';
+    }
+
+    console.log(`📦 Antes de mover: left=${left}, top=${top}`);
+    left += deltaX;
+    top += deltaY;
+    card.style.left = left + 'px';
+    card.style.top = top + 'px';
+    console.log(`📦 Depois de mover: left=${left}, top=${top}`);
+
+    card.style.opacity = '0.7';
+    if (moveTimeout) clearTimeout(moveTimeout);
+    moveTimeout = setTimeout(() => {
+      card.style.opacity = '1';
+    }, 200);
+  }
+} else {
+  console.log("🛑 Dispositivo móvel detectado. Teclado desativado.");
+}
+</script>
+
+
+
+
+
+
+
+
+
+<script>
+//observador de boxshadows perdidas como duplicatas azuis ou ao colocar a carta na mesa douradas!
+setInterval(() => {
+    const mesa = document.getElementById('table-area');
+    const elementosNaMesa = mesa.querySelectorAll('*');
+
+    elementosNaMesa.forEach(elemento => {
+        if (elemento.style.boxShadow) {
+            elemento.style.boxShadow = '';
+            console.log('BoxShadow removido de um elemento');
+        }
+    });
+}, 2000);
+</script>
+
+
+<!--
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+-->
+
+    <script src="codigo.js"></script>
+
+
+
+
+
+
+
+
+
+<script>
+// Função para aguardar e CONSERTAR imagens que falharam no carregamento
+function waitUntilImagesFullyLoaded() {
+    const tableArea = document.getElementById('table-area');
+    const overlay = document.getElementById('loadingOverlay');
+
+    // Função que detecta e tenta consertar imagens quebradas
+    const fixBrokenImages = () => {
+        const images = tableArea.querySelectorAll('img');
+        let allLoaded = true;
+        let fixedCount = 0;
+
+        images.forEach(img => {
+            // Se a imagem terminou o ciclo mas tem largura 0, ela falhou/quebrou.
+            if (img.complete && img.naturalWidth === 0) {
+                allLoaded = false;
+                
+                // Evita loop infinito caso a imagem realmente não exista no servidor
+                let retries = parseInt(img.getAttribute('data-retries') || '0');
+                if (retries < 3) { // Tenta consertar até 3 vezes por carta
+                    img.setAttribute('data-retries', retries + 1);
+                    fixedCount++;
+
+                    // Pega a fonte original limpa, sem timestamps velhos
+                    let baseSrc = img.getAttribute('data-original-src') || img.src.split('?')[0];
+
+                    // Garante que se a carta estiver virada, ela baixe o verso
+                    if (img.getAttribute('data-flipped') === 'true' && !baseSrc.includes('back.jpeg')) {
+                        baseSrc = baseSrc.replace(/\.jpeg$/i, 'back.jpeg');
+                    }
+
+                    // Força o navegador a tentar de novo com um novo timestamp
+                    img.src = `${baseSrc}?retry=${new Date().getTime()}`;
+                }
+            } else if (!img.complete) {
+                allLoaded = false; // Ainda está baixando normalmente
+            }
+        });
+
+        if (fixedCount > 0) {
+            console.log(`Auto-Repair: Tentando recarregar ${fixedCount} imagens falhas...`);
+        }
+        
+        return allLoaded;
+    };
+
+    // Verifica a cada 1 segundo se precisa consertar algo
+    const interval = setInterval(() => {
+        if (fixBrokenImages()) {
+            clearInterval(interval);
+            clearTimeout(timeout);
+            overlay.style.display = 'none';
+            console.log("Todas as imagens foram carregadas e checadas com sucesso!");
+        }
+    }, 1000);
+
+    // Limite de segurança: Libera a mesa após 25 segundos para não travar o jogador
+    const timeout = setTimeout(() => {
+        clearInterval(interval);
+        overlay.style.display = 'none';
+
+        // Verifica uma última vez se ainda há cartas quebradas
+        const stillBroken = Array.from(tableArea.querySelectorAll('img')).some(img => img.naturalWidth === 0);
+
+        if (stillBroken) {
+            console.log("Aviso: Conexão instável. O Auto-Repair continuará em segundo plano.");
+            // Deixa um verificador lento (a cada 5 segundos) para ir arrumando as que faltaram sem pesar o PC
+            setInterval(fixBrokenImages, 5000);
+        }
+    }, 25000);
+}
+
+// Dispara ao carregar a página
+window.addEventListener('load', () => {
+    waitUntilImagesFullyLoaded();
+});
+</script>
+
+
+<!-- Overlay de carregamento -->
+<div id="loadingOverlay" style="
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    font-size: 2em;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999999999;
+">
+    AGUARDE! Carregando...
+</div>
+
+
+
+
+
+
+
+
+
+<button id="shuffle-button">Embaralhar setup</button>
+
+<script>
+
+
+document.getElementById("shuffle-button").addEventListener("click", () => {
+    console.log("Iniciando Setup Auto-Adaptável com Efeito Visual e Radar de Servidor...");
+
+    // ================= CONFIGURAÇÃO =================
+    const DECKS_PARA_EMBARALHAR = [0];      
+    const DECKS_PARA_ROTACIONAR = [0];         
+    const DECKS_PARA_VIRAR_ALEATORIO = [0]; 
+    // ================================================
+
+    const todosDecks = [...new Set([...DECKS_PARA_EMBARALHAR, ...DECKS_PARA_ROTACIONAR, ...DECKS_PARA_VIRAR_ALEATORIO])];
+
+    const executarSetupFinal = () => {
+        // 1. APLICAMOS O BLUR AQUI (Garante que só borra as cartas que já existem)
+        todosDecks.forEach(deckId => {
+            document.querySelectorAll(`#table-area .card[data-deck='${deckId}']`).forEach(c => {
+                c.classList.add('loading-dice');
+            });
+        });
+
+        todosDecks.forEach(deckId => {
+            const cartasFisicas = Array.from(document.querySelectorAll(`#table-area .card[data-deck='${deckId}']`));
+            if (cartasFisicas.length === 0) return;
+
+            // DESCOBERTA AUTOMÁTICA DE ARQUIVOS ÚNICOS
+            let imagensEncontradas = cartasFisicas.map(c => c.getAttribute("data-original-src")).filter(src => src !== null);
+            let bibliotecaUnica = [...new Set(imagensEncontradas)];
+
+            // MISTURA DA BIBLIOTECA
+            if (DECKS_PARA_EMBARALHAR.includes(deckId)) {
+                for (let i = bibliotecaUnica.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [bibliotecaUnica[i], bibliotecaUnica[j]] = [bibliotecaUnica[j], bibliotecaUnica[i]];
+                }
+            }
+
+            // APLICAÇÃO NOS SLOTS
+            cartasFisicas.forEach((slot, index) => {
+                const imagemSorteada = bibliotecaUnica[index % bibliotecaUnica.length];
+                const ext = imagemSorteada.toLowerCase().includes(".jpeg") ? ".jpeg" : ".jpg";
+                const versoCaminho = imagemSorteada.includes("back") ? imagemSorteada : imagemSorteada.replace(ext, `back${ext}`);
+
+                let rot = 0;
+                if (DECKS_PARA_ROTACIONAR.includes(deckId)) {
+                    rot = Math.random() < 0.5 ? 0 : 180;
+                }
+
+                let virada = slot.getAttribute("data-flipped") === "true";
+                if (DECKS_PARA_VIRAR_ALEATORIO.includes(deckId)) {
+                    const chance = Math.random() * 0.6 + 0.2;
+                    virada = Math.random() < chance;
+                }
+
+                // ATUALIZAÇÃO DO DOM
+                slot.setAttribute("data-original-src", imagemSorteada);
+                slot.setAttribute("data-flipped", virada.toString());
+                slot.setAttribute("data-rotation", rot.toString());
+                slot.style.transform = `rotate(${rot}deg)`;
+                
+                // Troca a imagem e remove o blur quando carregar
+                slot.src = virada ? versoCaminho : imagemSorteada;
+                
+                // Pequeno atraso para o usuário ver o efeito antes de limpar
+                setTimeout(() => {
+                    slot.classList.remove('loading-dice');
+                }, 300);
+            });
+        });
+
+        console.log("✅ Setup concluído com efeito visual.");
+    };
+
+    // ====== RADAR DE SERVIDOR (Substitui o setTimeout fixo) ======
+    let tentativas = 0;
+    const maxTentativas = 50; // Tenta por até 10 segundos (50 x 200ms)
+
+    const verificarSeServidorCarregou = () => {
+        // Pegamos o primeiro deck da lista para usar como referência
+        const deckReferencia = todosDecks[0];
+        
+        // Verifica se a carta existe E se o Setup já colocou o "data-original-src" nela
+        const cartasProntas = document.querySelectorAll(`#table-area .card[data-deck='${deckReferencia}'][data-original-src]`);
+
+        if (cartasProntas.length > 0) {
+            console.log("✅ Cartas detectadas! O servidor terminou de carregar.");
+            // Dá um fôlego extra de 300ms só para o DOM renderizar visualmente e executa
+            setTimeout(executarSetupFinal, 300); 
+        } else if (tentativas < maxTentativas) {
+            tentativas++;
+            console.log(`⏳ Aguardando servidor... (Tentativa ${tentativas}/50)`);
+            setTimeout(verificarSeServidorCarregou, 200); // Tenta de novo em 200ms
+        } else {
+            console.error("⛔ Tempo esgotado: O servidor está muito lento ou as cartas não foram criadas.");
+        }
+    };
+
+    // Dá o play no radar
+    verificarSeServidorCarregou();
+});
+
+
+
+
+
+
+
+
+
+
+
+//-------------//
+
+function ativarMesaQuandoEstiverPronta() {
+    console.log("Aguardando carregamento dos elementos da mesa...");
+
+    const checkExist = setInterval(() => {
+        const cards = document.querySelectorAll('.card');
+        const popups = document.querySelectorAll('.popup-zoom');
+
+        if (cards.length > 0 || popups.length > 0) {
+            clearInterval(checkExist);
+
+            // 1. TRATAMENTO DOS POPUPS (Isolado da Mesa)
+            popups.forEach(p => {
+                p.classList.add('popup-loading');
+                if (!p.querySelector('.aviso-carregando')) {
+                    const aviso = document.createElement('div');
+                    aviso.className = 'aviso-carregando';
+                    aviso.innerText = '⌛ Invocando visões...';
+                    p.appendChild(aviso);
+                }
+
+                const img = p.querySelector('img');
+                // Captura os dados de scroll que salvamos no dataset
+                const sLeft = p.dataset.pendingScrollLeft || img?.dataset.pendingScrollLeft;
+                const sTop = p.dataset.pendingScrollTop || img?.dataset.pendingScrollTop;
+
+                const ajustarEstePopup = () => {
+                    if (sLeft !== undefined || sTop !== undefined) {
+                        const container = p.querySelector('.img-container') || p;
+                        container.scrollLeft = parseInt(sLeft);
+                        container.scrollTop = parseInt(sTop);
+                    }
+                    p.classList.remove('popup-loading');
+                    const av = p.querySelector('.aviso-carregando');
+                    if (av) av.remove();
+                };
+
+                // Se a imagem do popup ainda não carregou (servidor lento), espera ELA
+                if (img && !img.complete) {
+                    img.addEventListener('load', ajustarEstePopup, { once: true });
+                } else {
+                    // Se já carregou ou não tem imagem, ajusta com um pequeno delay
+                    setTimeout(ajustarEstePopup, 500);
+                }
+            });
+
+            // 2. RESTAURAÇÃO DA MESA (CÓDIGO ORIGINAL SEU - INTEGRAL)
+            setTimeout(() => {
+                reativarFuncionalidadesMesa();
+
+                if (window.cameraRestauracaoMesa) {
+                    const cam = window.cameraRestauracaoMesa;
+                    const tableWrapper = document.getElementById('table-wrapper');
+                    const tableArea = document.getElementById('table-area');
+                    const allImages = document.querySelectorAll('img');
+                    let loadedCount = 0;
+                    const totalImages = allImages.length;
+
+                    const iniciarScrolls = () => {
+                        if (cam.zoom) {
+                            zoomLevel = parseFloat(cam.zoom);
+                            tableArea.style.transformOrigin = '0 0';
+                            tableArea.style.transform = `scale(${zoomLevel})`;
+                        }
+
+                        setTimeout(() => {
+                            let tentativas = 0;
+                            const radarScroll = setInterval(() => {
+                                tableWrapper.scrollLeft = parseInt(cam.scrollLeft || 0);
+                                tableWrapper.scrollTop = parseInt(cam.scrollTop || 0);
+
+                                const erroX = Math.abs(tableWrapper.scrollLeft - (cam.scrollLeft || 0));
+                                const erroY = Math.abs(tableWrapper.scrollTop - (cam.scrollTop || 0));
+
+                                if ((erroX < 5 && erroY < 5) || tentativas > 30) {
+                                    clearInterval(radarScroll);
+                                    window.cameraRestauracaoMesa = null;
+                                }
+                                tentativas++;
+                            }, 100);
+                        }, 150);
+                    };
+
+                    if (totalImages === 0) {
+                        iniciarScrolls();
+                    } else {
+                        allImages.forEach(img => {
+                            if (img.complete) {
+                                loadedCount++;
+                                if (loadedCount === totalImages) iniciarScrolls();
+                            } else {
+                                img.addEventListener('load', () => {
+                                    loadedCount++;
+                                    if (loadedCount === totalImages) iniciarScrolls();
+                                }, { once: true });
+                                img.addEventListener('error', () => {
+                                    loadedCount++; 
+                                    if (loadedCount === totalImages) iniciarScrolls();
+                                }, { once: true });
+                            }
+                        });
+                    }
+                }
+            }, 100);
+        }
+    }, 200);
+
+    setTimeout(() => { clearInterval(checkExist); }, 15000);
+}
+
+// Chame a função para iniciar a monitorização logo que o script carregar
+ativarMesaQuandoEstiverPronta();
+
+
+
+
+
+
+</script>
+
+
+
+<script>
+// Inicia a lousa ao carregar a página
+window.addEventListener('load', initLousaGlobal);
+</script>
+
+
+
+
+
+
+</body>
+
+
